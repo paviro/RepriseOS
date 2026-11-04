@@ -97,7 +97,7 @@ int main(void)
     const char *screens[] = {
         "HandleStartGenius",
         "CFW_SongInfo",
-        "CFW_Chapters",
+        "CFW_NowPlayingChapters",
         "CFW_EpisodeChapters",
     };
     for (unsigned i = 0; i < sizeof(screens) / sizeof(*screens); i++)
@@ -111,7 +111,7 @@ int main(void)
         "CFW_PlayLast",
         "CFW_SongInfoExtra",
         "CFW_Chapters_Select",
-        "CFW_ChaptersExtra",
+        "CFW_NowPlayingChaptersExtra",
         "CFW_EpisodeChaptersExtra",
         "",
     };

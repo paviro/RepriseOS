@@ -10,6 +10,6 @@ PATCH_ARM int cfw_context_menu_screen_action(const char *action, const char *exp
 {
     return !(cfw_string_equal(action, expected) ||
              cfw_string_equal(action, "CFW_SongInfo") ||
-             cfw_string_equal(action, "CFW_Chapters") ||
+             cfw_string_equal(action, "CFW_NowPlayingChapters") ||
              cfw_string_equal(action, "CFW_EpisodeChapters"));
 }

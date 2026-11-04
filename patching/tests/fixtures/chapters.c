@@ -123,7 +123,7 @@ static void osos_context_menu_append(struct osos_context_menu *m, uint32_t label
     }
     assert(
         label == CFW_CHAPTERS_LABEL &&
-        (!strcmp(action, "CFW_Chapters") || !strcmp(action, "CFW_EpisodeChapters")) &&
+        (!strcmp(action, "CFW_NowPlayingChapters") || !strcmp(action, "CFW_EpisodeChapters")) &&
         flags == 1);
     menus++;
 }
@@ -223,14 +223,14 @@ int main(void)
 {
     uintptr_t out;
     assert(!cfw_chapters_action(&controller, "Other", 0));
-    assert(cfw_chapters_action(&controller, "CFW_Chapters", OSOS_ACTION_SUPPORT_QUERY));
+    assert(cfw_chapters_action(&controller, "CFW_NowPlayingChapters", OSOS_ACTION_SUPPORT_QUERY));
     assert(!creates && !locks);
     cfw_chapters_menu(0);
     assert(menus == 1);
     count = 0;
     cfw_chapters_menu(0);
     assert(menus == 1);
-    cfw_chapters_action(&controller, "CFW_Chapters", 0);
+    cfw_chapters_action(&controller, "CFW_NowPlayingChapters", 0);
     assert(!pushes);
     count = 9;
     video = 1;
@@ -241,7 +241,7 @@ int main(void)
     cfw_chapters_menu(0);
     assert(menus == 1);
     valid = 1;
-    cfw_chapters_action(&controller, "CFW_Chapters", 0);
+    cfw_chapters_action(&controller, "CFW_NowPlayingChapters", 0);
     assert(pushes == 1);
     assert(cfw_chapters_property(OSOS_PROPERTY_COUNT, CFW_Chapters_Rows, &out) &&
            out == 9);
@@ -317,7 +317,7 @@ int main(void)
     assert(seeks == 2);
     count = 2000;
     duration = 2000000;
-    cfw_chapters_action(&controller, "CFW_Chapters", 0);
+    cfw_chapters_action(&controller, "CFW_NowPlayingChapters", 0);
     assert(cfw_chapters_property(OSOS_PROPERTY_COUNT, CFW_Chapters_Rows, &out) &&
            out == 2000);
     selected = 1999;
@@ -379,13 +379,13 @@ int main(void)
     assert(menus == previous_menus + 1);
     count = 9;
     duration = 9000;
-    cfw_chapters_action(&controller, "CFW_Chapters", 0);
+    cfw_chapters_action(&controller, "CFW_NowPlayingChapters", 0);
     cfw_chapters_action(&controller, "CFW_Chapters_Select", 0);
     assert(seeks == 4 && episode_plays == 1); /* Now Playing clears episode origin. */
     previous_menus = menus;
     previous_pushes = pushes;
     create_failed = 1;
-    cfw_chapters_action(&controller, "CFW_Chapters", 0);
+    cfw_chapters_action(&controller, "CFW_NowPlayingChapters", 0);
     assert(pushes == previous_pushes && !locks);
     create_failed = 0;
     count = INT32_MAX;
@@ -396,7 +396,7 @@ int main(void)
     for (unsigned i = 0; i < sizeof(invalid_counts) / sizeof(invalid_counts[0]); i++) {
         count = invalid_counts[i];
         cfw_chapters_menu(NULL);
-        cfw_chapters_action(&controller, "CFW_Chapters", 0);
+        cfw_chapters_action(&controller, "CFW_NowPlayingChapters", 0);
         assert(cfw_chapters_property(OSOS_PROPERTY_COUNT, CFW_Chapters_Rows, &out));
         assert(out == 0 && menus == previous_menus && pushes == previous_pushes);
         cfw_episode_menu(&controller, 4);
@@ -414,7 +414,7 @@ int main(void)
     library_item.record = &record_b;
     library_item.reserved[1] = playing.reserved[1];
     for (unsigned episode = 0; episode < 2; episode++) {
-        const char *action = episode ? "CFW_EpisodeChapters" : "CFW_Chapters";
+        const char *action = episode ? "CFW_EpisodeChapters" : "CFW_NowPlayingChapters";
         int (*handler)(void *, const char *, uint32_t) =
             episode ? cfw_episode_action : cfw_chapters_action;
         unsigned offset = episode ? OSOS_EPISODE_LAYOUT_OFFSET
