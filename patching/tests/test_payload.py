@@ -56,6 +56,7 @@ class PayloadTests(unittest.TestCase):
                 [
                     root / "payload/dark_mode.ui",
                     root / "payload/chapters.ui",
+                    root / "payload/song_info.ui",
                     root / "payload/custom_eq.ui",
                     root / "payload/cfw_info.ui",
                     root / "payload/album_artists.ui",
@@ -65,6 +66,9 @@ class PayloadTests(unittest.TestCase):
             )
             for name in (
                 "chapters",
+                "context_menu",
+                "song_actions",
+                "song_info",
                 "album_artist",
                 "album_artists_index",
                 "album_artists",
