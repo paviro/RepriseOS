@@ -176,3 +176,7 @@ PATCH_POINTER(OSOS_EPISODE_SECONDARY_ACTION_SLOT, OSOS_EPISODE_ACTION,
               cfw_episode_action);
 PATCH_CALL(OSOS_EPISODE_CANCEL_APPEND_CALL, OSOS_CONTEXT_MENU_APPEND,
            cfw_episode_menu_cancel);
+
+/* Extend native item-status circles for unfinished playback. */
+PATCH_POINTER(OSOS_MEDIA_LIST_PROPERTY_SLOT, OSOS_MEDIA_LIST_PROPERTY,
+              cfw_media_progress_property);
