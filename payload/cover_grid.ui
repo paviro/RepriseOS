@@ -1,0 +1,7 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<ui>
+  <music-entry id="CFW_CoverGrid" title="Cover Grid"
+               after="MainMenu_Music_List_CoverFlow" main-after="MainMenu_List_Coverflow"
+               main-visible="false" music-visible="true"
+               open="CFW_CoverGrid" highlight="HandleMusicHilited"/>
+</ui>

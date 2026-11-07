@@ -14,6 +14,14 @@ from .resources import (
     word,
 )
 
+# A captioned canvas ends in a bar cloned from its status bar: the 24 px bar
+# image at the bottom of the 240 px screen and a title inset like the status bar's.
+# The image's last two rows are a translucent shadow for content below a top bar,
+# so they extend past the screen's bottom edge. Canvases leave the bar's visible
+# height, CFW_GRID_CAPTION in payload/cover_grid_view.h, uncovered.
+CAPTION_TOP = 240 - 22
+CAPTION_TEXT_TOP = CAPTION_TOP + 4
+
 
 class DocumentCompiler:
     def __init__(self, resources, document):
@@ -69,21 +77,36 @@ class DocumentCompiler:
         resources = self.resources
         screen = resources.allocate(root.name + "_Screen")
         layout = resources.allocate(root.name + "_Layout")
+        title_string = resources.allocate(root.name + "_TitleString")
+        title = resources.source(root.title, title_string)
+        self.string_ids.update(
+            {
+                root.name + "_Screen": screen,
+                root.name + "_Layout": layout,
+                root.name + "_Title": title,
+                root.name + "_TitleString": title_string,
+            }
+        )
+        view_type = int.from_bytes((root.view or "cfwc").encode("ascii"), "big")
         template = resources.allocate()
         prototype = blocks(resources.stock("View", "Settings_Legal_Template"))[0][1]
         view = Resource(prototype[:0x5C])
         # Cover the status bar's final divider row. Bottom/right are independent extents.
+        # A caption marquee overlays the bottom strip, which the canvas paints.
         view[:0x30] = struct.pack("<12i", 0, 0, 0, 23, 0, 0, 217, 0, 6, 320, 0, 5)
         put(view, 0x30, resources.allocate())
-        put(view, 0x4C, 0x63667763)  # cfwc
-        resources.add("View", template, pack_blocks([(0x63667763, view)]))
+        put(view, 0x4C, view_type)
+        views = [(view_type, view)]
+        if root.caption:
+            views.extend(self.caption_views(root.caption))
+        resources.add("View", template, pack_blocks(views))
         resources.add(
             "TMLT", template, resources.stock("TMLT", "Settings_Brightness_Template")
         )
         resources.clone_layout(
             resources.native("Settings_Brightness_Screen_Default"),
             layout,
-            resources.source(root.title),
+            title,
             {resources.native("Settings_Brightness_Template"): template},
             view_bindings={
                 resources.native("Settings_Brightness_Template"): pack_blocks([])
@@ -96,7 +119,7 @@ class DocumentCompiler:
                 if word(instance, 4) == template:
                     put(instance, 0x10, word(instance, 0x10) & ~0x00FF0000)
             resources.replace("SSin", instances_id, pack_blocks(instances))
-        resources.add("SCST", screen, b"CFWCanvas")
+        resources.add("SCST", screen, (root.controller or "CFWCanvas").encode("ascii"))
         resources.set_events("CEVT", screen, struct.pack("<I", 0))
         layouts = blocks(resources.stock("SLst", "Settings_Brightness_Screen"))
         put(layouts[0][1], 0, layout)
@@ -108,6 +131,35 @@ class DocumentCompiler:
             + event("button.menu.up", "navigator.PopTopScreen")
             + event("button.menu.pressandhold", "navigator.PopToMainScreen"),
         )
+
+    def caption_views(self, name):
+        """A bottom bar matching the status bar, from Now Playing's status bar
+        template: its background image and a centered marquee title bound to a
+        Settings model string, so long captions scroll like the rest of the OS
+        and themes restyle both bars alike."""
+        resources = self.resources
+        property_id = resources.allocate(name)
+        self.string_ids[name] = property_id
+        template = blocks(resources.stock("View", "NowPlaying_StatusBar_Template"))
+        image_kind, image = template[0]
+        image = Resource(image)
+        # Left 0, top fixed, height from the bitmap, width as in the status bar.
+        image[:0x30] = struct.pack("<12i", 0, 0, 0, CAPTION_TOP, 0, 0, 0, 0, 8, 0, 0, 7)
+        put(image, 0x30, resources.allocate())
+        text_kind, text = next(
+            (kind, Resource(data))
+            for kind, data in template
+            if word(data, 0x30) == resources.native("NowPlaying_StatusBar_Text_View")
+        )
+        text[:0x30] = struct.pack(
+            "<12i", 8, 0, 0, CAPTION_TEXT_TOP, 0, 0, 0, 0, 8, -8, 0, 0
+        )
+        put(text, 0x30, resources.allocate())
+        put(text, 0x5C, 5)  # marquee text, without the status bar's list binding
+        put(text, 0x64, resources.property_source(0x8900, property_id))
+        put(text, 0x84, 0)
+        put(text, 0x88, 0)
+        return [(image_kind, image), (text_kind, text)]
 
     def paragraph_views(self, text):
         resources = self.resources
@@ -483,21 +535,22 @@ def compile_document(resources, document, text=""):
 
 def compile_music_entry(resources, entry, compiled):
     name = entry["id"]
-    screen = resources.allocate(name + "_Screen")
-    layout = resources.allocate(name + "_Layout")
+    if "screen" in entry:
+        screen = resources.allocate(name + "_Screen")
+        layout = resources.allocate(name + "_Layout")
     title_id = resources.allocate(name + "_Title")
     title = resources.source(entry["title"], title_id)
-    resources.clone_layout(resources.native(entry["layout"]), layout, title)
-    resources.add("SCST", screen, resources.stock("SCST", entry["screen"]))
-    resources.alias_events("CEVT", screen, resources.native(entry["screen"]))
-    layouts = blocks(resources.stock("SLst", entry["screen"]))
-    if len(layouts) != 1:
-        raise ValueError("Music entry expects a single-layout native screen")
-    put(layouts[0][1], 0, layout)
-    resources.add("SLst", screen, pack_blocks(layouts))
-    compiled.string_ids.update(
-        {name + "_Screen": screen, name + "_Layout": layout, name + "_Title": title_id}
-    )
+    compiled.string_ids[name + "_Title"] = title_id
+    if "screen" in entry:
+        resources.clone_layout(resources.native(entry["layout"]), layout, title)
+        resources.add("SCST", screen, resources.stock("SCST", entry["screen"]))
+        resources.alias_events("CEVT", screen, resources.native(entry["screen"]))
+        layouts = blocks(resources.stock("SLst", entry["screen"]))
+        if len(layouts) != 1:
+            raise ValueError("Music entry expects a single-layout native screen")
+        put(layouts[0][1], 0, layout)
+        resources.add("SLst", screen, pack_blocks(layouts))
+        compiled.string_ids.update({name + "_Screen": screen, name + "_Layout": layout})
 
     visibility = {
         "id": name,

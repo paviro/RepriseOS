@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "ui_visibility.h"
 #include "clicker.h"
+#include "cover_grid.h"
 #include "custom_eq.h"
 #include "dark_mode.h"
 #include "osos.h"
@@ -24,6 +25,7 @@ PATCH_ARM int cfw_settings_property(void *model, uint32_t type, uint32_t propert
 {
     if (cfw_ui_property(type, property, out) ||
         cfw_dark_mode_property(type, property, out) ||
+        cfw_cover_grid_property(type, property, out) ||
         cfw_clicker_property(model, type, property, out))
         return 1;
 

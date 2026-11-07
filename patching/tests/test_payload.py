@@ -55,6 +55,8 @@ class PayloadTests(unittest.TestCase):
                 Resources(metadata["resources"], bindings),
                 [
                     root / "payload/dark_mode.ui",
+                    root / "payload/cover_grid.ui",
+                    root / "payload/cover_grid_screen.ui",
                     root / "payload/custom_eq.ui",
                     root / "payload/cfw_info.ui",
                     root / "payload/album_artists.ui",
@@ -74,6 +76,8 @@ class PayloadTests(unittest.TestCase):
                 "menu_resources",
                 "bitmap_assets",
                 "dark_mode",
+                "cover_grid",
+                "cover_grid_view",
                 "osos_handoff",
             ):
                 with self.subTest(fixture=name):

@@ -56,6 +56,10 @@ void cfw_ui_register_canvas(void)
 {
 }
 
+void cfw_ui_register_cover_grid(void)
+{
+}
+
 static void osos_resource_set(void *, uint32_t, uint32_t, const void *, uint32_t);
 
 static const void *osos_resource_next(void *bank, uint32_t *id, uint32_t *size)

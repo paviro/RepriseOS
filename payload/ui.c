@@ -3,7 +3,7 @@
 #include "osos.h"
 #include "cfw.h"
 
-static void notify(uint32_t property)
+void cfw_ui_notify(uint32_t property)
 {
     void *model = osos_ui_service_get(0x8900);
     if (model)
@@ -12,8 +12,8 @@ static void notify(uint32_t property)
 
 void cfw_ui_refresh(const struct cfw_ui_field *field)
 {
-    notify(field->property);
-    notify(field->summary_property);
+    cfw_ui_notify(field->property);
+    cfw_ui_notify(field->summary_property);
 }
 
 void cfw_ui_status(const struct cfw_ui_action *action, unsigned int status)
@@ -21,7 +21,7 @@ void cfw_ui_status(const struct cfw_ui_action *action, unsigned int status)
     if (status >= action->count)
         return;
     *action->status = status;
-    notify(action->property);
+    cfw_ui_notify(action->property);
 }
 
 int cfw_ui_property(uint32_t type, uint32_t property, uintptr_t *out)

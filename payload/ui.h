@@ -49,6 +49,8 @@ extern const uint32_t cfw_ui_field_count;
 extern const struct cfw_ui_action *const cfw_ui_actions[];
 extern const uint32_t cfw_ui_action_count;
 
+/* Tells Settings model observers that a payload property changed. */
+void cfw_ui_notify(uint32_t property);
 void cfw_ui_refresh(const struct cfw_ui_field *field);
 void cfw_ui_status(const struct cfw_ui_action *action, unsigned int status);
 int cfw_ui_property(uint32_t type, uint32_t property, uintptr_t *out);

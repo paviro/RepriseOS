@@ -2,6 +2,7 @@
 
 #include "osos.h"
 #include "patch.h"
+#include "screen.h"
 #include "ui.h"
 #include "custom_eq.h"
 #include "eq_coefficients.h"
@@ -9,11 +10,6 @@
 
 enum {
     CANVAS_TYPE = 0x63667763, /* cfwc */
-    VIEW_BYTES = 0xa4,
-    VIEW_OPTIONS_BYTES = 0x5c,
-    VIEW_VTABLE_BYTES = 0x104,
-    VIEW_VTABLE_PREFIX = 12,
-    VIEW_DRAW_SLOT = 0x74,
 };
 
 enum {
@@ -68,18 +64,12 @@ static uint32_t canvas_index(int band, int parameter)
     return field->model->values[field->slot];
 }
 
-/* The native accumulator registers itself; keep its storage for the UI lifetime. */
-static uint32_t canvas_wheel[0x34 / 4];
-static int canvas_wheel_initialized;
+static struct cfw_wheel canvas_wheel;
 static int canvas_active;
 
 static void canvas_reset_wheel(void)
 {
-    if (!canvas_wheel_initialized) {
-        osos_wheel_accumulator_init(canvas_wheel, 5, 1, 350);
-        canvas_wheel_initialized = 1;
-    }
-    osos_wheel_accumulator_reset(canvas_wheel);
+    cfw_wheel_reset(&canvas_wheel, 1);
 }
 
 static void canvas_reset(void)
@@ -89,11 +79,6 @@ static void canvas_reset(void)
     editor.mode = MODE_BAND;
     editor.response = 0;
     canvas_reset_wheel();
-}
-
-static int canvas_clamp(int64_t value, int low, int high)
-{
-    return value < low ? low : value > high ? high : (int)value;
 }
 
 /* Hold events are consumed by the system UI before reaching screen controllers. */
@@ -115,36 +100,36 @@ PATCH_CALL(0x0810af14, OSOS_SYSTEM_HOLD_CHANGED, cfw_eq_canvas_hold_changed);
 static PATCH_ARM int canvas_event(void *controller, void *event)
 {
     const uint32_t *words = event;
-    if (editor.response && (words[1] == 0x15 || words[1] == 6 || words[1] == 0x0d))
+    if (editor.response &&
+        (words[1] == OSOS_EVENT_WHEEL || words[1] == OSOS_EVENT_BUTTON_PRESS ||
+         words[1] == OSOS_EVENT_BUTTON_RELEASE))
         return 1;
-    if (words[1] == 0x15) {
-        osos_wheel_decode(event);
-        /* Match native list input, including its steady five-count threshold. */
-        int delta = osos_wheel_accumulator_step(canvas_wheel, (int32_t)words[3], 0);
+    if (words[1] == OSOS_EVENT_WHEEL) {
+        int delta = cfw_wheel_step(&canvas_wheel, event);
         if (!delta)
             return 1;
         if (editor.mode == MODE_BAND) {
             editor.band =
-                canvas_clamp((int64_t)editor.band + delta, 0, CFW_EQ_BANDS - 1);
+                cfw_clamp((int64_t)editor.band + delta, 0, CFW_EQ_BANDS - 1);
         } else if (editor.mode == MODE_PARAMETER) {
             editor.parameter =
-                canvas_clamp((int64_t)editor.parameter + delta, 0, PARAM_COUNT - 1);
+                cfw_clamp((int64_t)editor.parameter + delta, 0, PARAM_COUNT - 1);
         } else {
             const struct cfw_ui_field *field =
                 canvas_field(editor.band, editor.parameter);
             uint32_t previous = field->model->values[field->slot];
             uint32_t value =
-                canvas_clamp((int64_t)previous + delta, 0, field->count - 1);
+                cfw_clamp((int64_t)previous + delta, 0, field->count - 1);
             if (value != previous)
                 field->model->change(field->slot, value);
         }
-    } else if (words[1] == 0x0d && osos_button_ui_key(event) == 0x6f) {
+    } else if (words[1] == OSOS_EVENT_BUTTON_RELEASE && osos_button_ui_key(event) == OSOS_KEY_CENTER) {
         if (editor.mode == MODE_EDIT)
             cfw_eq_model.commit();
         /* Button release: Center enters controls, then toggles selection/editing. */
         editor.mode = editor.mode == MODE_PARAMETER ? MODE_EDIT : MODE_PARAMETER;
         canvas_reset_wheel();
-    } else if (words[1] == 0x0d && osos_button_ui_key(event) == 0x6e &&
+    } else if (words[1] == OSOS_EVENT_BUTTON_RELEASE && osos_button_ui_key(event) == OSOS_KEY_MENU &&
                editor.mode != MODE_BAND) {
         if (editor.mode == MODE_EDIT)
             cfw_eq_model.commit();
@@ -498,29 +483,13 @@ static PATCH_ARM void canvas_draw(void *view, void *draw_argument, const int32_t
 }
 
 /* Preserve native destruction, attachment and layout methods plus ABI metadata. */
-static const uintptr_t canvas_vtable[(VIEW_VTABLE_PREFIX + VIEW_VTABLE_BYTES) / 4] = {
-    [(VIEW_VTABLE_PREFIX + VIEW_DRAW_SLOT) / 4] = (uintptr_t)canvas_draw,
-};
-PATCH_COPY(canvas_vtable, 0, OSOS_VIEW_VTABLE - VIEW_VTABLE_PREFIX,
-           VIEW_VTABLE_PREFIX + VIEW_DRAW_SLOT);
-PATCH_COPY(canvas_vtable, VIEW_VTABLE_PREFIX + VIEW_DRAW_SLOT + 4,
-           OSOS_VIEW_VTABLE + VIEW_DRAW_SLOT + 4,
-           VIEW_VTABLE_BYTES - VIEW_DRAW_SLOT - 4);
+CFW_VIEW_VTABLE(canvas_vtable, canvas_draw);
 
 static PATCH_ARM void *canvas_create(void *owner, void *parent, void *event_target,
                                      const void *descriptor)
 {
     (void)owner;
-    uint32_t options[VIEW_OPTIONS_BYTES / 4];
-    typedef void (*options_fn)(const void *, void *);
-    typedef void *(*construct_fn)(void *, void *, void *, void *, const void *);
-    for (unsigned int i = 0; i < VIEW_OPTIONS_BYTES / 4; i++)
-        options[i] = 0;
-    ((options_fn)OSOS_VIEW_INIT_OPTIONS)(descriptor, options);
-    void *view = ((void *(*)(uint32_t))OSOS_CPP_NEW)(VIEW_BYTES);
-    view = ((construct_fn)OSOS_VIEW_CONSTRUCT)(view, 0, parent, event_target, options);
-    *(const uintptr_t **)view = canvas_vtable + VIEW_VTABLE_PREFIX / 4;
-    return view;
+    return cfw_view_create(parent, event_target, descriptor, canvas_vtable);
 }
 
 static PATCH_ARM uint32_t canvas_activate(void *controller, uint32_t entering)
@@ -539,23 +508,15 @@ static PATCH_ARM uint32_t canvas_deactivate(void *controller, uint32_t leaving)
     return osos_controller_deactivate(controller, leaving);
 }
 
-static const uintptr_t canvas_controller_vtable[(12 + 0x128) / 4] = {
-    [(12 + 0x30) / 4] = (uintptr_t)canvas_event,
-    [(12 + 0xec) / 4] = (uintptr_t)canvas_activate,
-    [(12 + 0xf0) / 4] = (uintptr_t)canvas_deactivate,
-};
-PATCH_COPY(canvas_controller_vtable, 0, OSOS_CONTROLLER_SCREEN_VTABLE - 12, 12 + 0x30);
-PATCH_COPY(canvas_controller_vtable, 12 + 0x34, OSOS_CONTROLLER_SCREEN_VTABLE + 0x34,
-           0xec - 0x34);
-PATCH_COPY(canvas_controller_vtable, 12 + 0xf4, OSOS_CONTROLLER_SCREEN_VTABLE + 0xf4,
-           0x128 - 0xf4);
+CFW_CONTROLLER_VTABLE(canvas_controller_vtable, canvas_event, canvas_activate,
+                      canvas_deactivate);
 
 static PATCH_ARM void *canvas_controller_create(const char *name, uint32_t screen,
                                                 uint32_t layout, uint32_t transition)
 {
     canvas_reset();
     void *controller = osos_controller_create_screen(name, screen, layout, transition);
-    *(const uintptr_t **)controller = canvas_controller_vtable + 3;
+    cfw_set_vtable(controller, canvas_controller_vtable);
     return controller;
 }
 

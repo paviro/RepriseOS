@@ -117,9 +117,27 @@ class Parser:
             if document.root is not None:
                 raise ValueError("Expected one root menu or page per UI declaration")
             if node.tag in ("toggle", "canvas"):
-                attributes(node, "id title")
+                attributes(
+                    node, "id title", "controller view caption" if node.tag == "canvas" else ""
+                )
+                view = node.get("view", "")
+                caption = node.get("caption", "")
+                if node.tag == "canvas" and (
+                    ("controller" in node.attrib) != bool(view)
+                    or (view and not re.fullmatch(r"[a-z]{4}", view))
+                ):
+                    raise ValueError(
+                        "A canvas sets both controller and a four-letter view type"
+                    )
+                if caption and not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", caption):
+                    raise ValueError("Invalid canvas caption property name")
                 document.root = Item(
-                    node.tag, self.identifier(node), node.attrib["title"]
+                    node.tag,
+                    self.identifier(node),
+                    node.attrib["title"],
+                    controller=node.get("controller", ""),
+                    view=view,
+                    caption=caption,
                 )
             else:
                 document.root = (
@@ -149,11 +167,14 @@ class Parser:
         elif node.tag == "music-entry":
             attributes(
                 node,
-                "id title after screen layout open highlight",
-                "main-after main-visible music-visible",
+                "id title after open highlight",
+                "screen layout main-after main-visible music-visible",
             )
             if document.music_entry is not None:
                 raise ValueError("Duplicate Music menu entry")
+            # Without a cloned screen, the open handler pushes its own.
+            if ("screen" in node.attrib) != ("layout" in node.attrib):
+                raise ValueError("A Music menu entry sets both screen and layout")
             self.identifier(node)
             document.music_entry = dict(node.attrib)
             for attribute, default in (

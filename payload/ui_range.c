@@ -2,18 +2,13 @@
 #include "ui.h"
 #include "osos.h"
 #include "patch.h"
+#include "screen.h"
 
-/* Native input settings retain the accumulator address for the UI lifetime. */
-static uint32_t range_wheel[0x34 / 4];
-static int range_wheel_initialized;
+static struct cfw_wheel range_wheel;
 
 static PATCH_ARM uint32_t range_activate(void *controller, uint32_t entering)
 {
-    if (!range_wheel_initialized) {
-        osos_wheel_accumulator_init(range_wheel, 5, 0, 350);
-        range_wheel_initialized = 1;
-    }
-    osos_wheel_accumulator_reset(range_wheel);
+    cfw_wheel_reset(&range_wheel, 0);
     return osos_controller_activate(controller, entering);
 }
 
@@ -21,17 +16,17 @@ static PATCH_ARM int range_event(void *controller, void *event)
 {
     const uint32_t *words = event;
     int delta;
-    if (words[1] == 0x15) {
-        osos_wheel_decode(event);
-        delta = osos_wheel_accumulator_step(range_wheel, (int32_t)words[3], 0);
-    } else if (words[1] == 6 || words[1] == 7 || words[1] == 8 || words[1] == 0x0d) {
+    if (words[1] == OSOS_EVENT_WHEEL) {
+        delta = cfw_wheel_step(&range_wheel, event);
+    } else if (words[1] == OSOS_EVENT_BUTTON_PRESS || words[1] == 7 || words[1] == 8 ||
+               words[1] == OSOS_EVENT_BUTTON_RELEASE) {
         uint32_t key = osos_button_ui_key(event);
-        if (key != 0x59 && key != 0x5a)
+        if (key != OSOS_KEY_PREVIOUS && key != OSOS_KEY_NEXT)
             return osos_controller_handle_event(controller, event);
-        if (words[1] != 0x0d)
+        if (words[1] != OSOS_EVENT_BUTTON_RELEASE)
             return 1;
-        delta = key == 0x59 ? -1 : 1;
-        osos_wheel_accumulator_reset(range_wheel);
+        delta = key == OSOS_KEY_PREVIOUS ? -1 : 1;
+        osos_wheel_accumulator_reset(range_wheel.state);
     } else {
         return osos_controller_handle_event(controller, event);
     }
@@ -62,22 +57,14 @@ static PATCH_ARM uint32_t range_deactivate(void *controller, uint32_t leaving)
     return osos_controller_deactivate(controller, leaving);
 }
 
-/* Preserve the native RTTI prefix, resource-screen lifecycle and deleting destructor. */
-static const uintptr_t range_vtable[(12 + 0x128) / 4] = {
-    [(12 + 0x30) / 4] = (uintptr_t)range_event,
-    [(12 + 0xec) / 4] = (uintptr_t)range_activate,
-    [(12 + 0xf0) / 4] = (uintptr_t)range_deactivate,
-};
-PATCH_COPY(range_vtable, 0, OSOS_CONTROLLER_SCREEN_VTABLE - 12, 12 + 0x30);
-PATCH_COPY(range_vtable, 12 + 0x34, OSOS_CONTROLLER_SCREEN_VTABLE + 0x34, 0xec - 0x34);
-PATCH_COPY(range_vtable, 12 + 0xf4, OSOS_CONTROLLER_SCREEN_VTABLE + 0xf4, 0x128 - 0xf4);
+CFW_CONTROLLER_VTABLE(range_vtable, range_event, range_activate, range_deactivate);
 
 static PATCH_ARM void *range_create(const char *name, uint32_t screen, uint32_t layout,
                                     uint32_t transition)
 {
     unsigned char *controller =
         osos_controller_create_screen(name, screen, layout, transition);
-    *(const uintptr_t **)controller = range_vtable + 3;
+    cfw_set_vtable(controller, range_vtable);
     return controller;
 }
 

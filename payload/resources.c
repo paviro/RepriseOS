@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "resources.h"
+#include "cover_grid_view.h"
 #include "osos.h"
 #include "patch.h"
 #include "ui.h"
@@ -60,6 +61,7 @@ void cfw_install_resources(void *bank)
 {
     cfw_ui_register_controllers();
     cfw_ui_register_canvas();
+    cfw_ui_register_cover_grid();
     for (uint32_t i = 0; i < cfw_resource_name_count; i++) {
         struct osos_string name;
         osos_string_init(&name, cfw_resource_names[i].name);

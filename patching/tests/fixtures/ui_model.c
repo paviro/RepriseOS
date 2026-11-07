@@ -13,6 +13,10 @@
 #define OSOS_NOTIFY_ALL 0x2a2a2a2a
 #define OSOS_ACTION_SUPPORT_QUERY 0xdeadbeef
 #define OSOS_MENU_CHECKED_BITMAP 17
+/* The shared View factory is compiled but not executed by this controller test. */
+#define OSOS_VIEW_INIT_OPTIONS 0
+#define OSOS_CPP_NEW 0
+#define OSOS_VIEW_CONSTRUCT 0
 #define osos_ui_service_get service
 #define osos_ui_selection get_selection
 #define osos_wheel_decode wheel_decode

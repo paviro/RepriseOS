@@ -203,3 +203,42 @@
 #define OSOS_BROWSER_BUILD_SONGS 0x0807b858
 #define OSOS_BROWSER_ORDER_MODE 0x0804af48
 #define OSOS_BROWSER_ORDER_FLAG_OFFSET 0x00000e3c
+
+/* Cover Grid: Cover Flow's library query and artwork loading. */
+#define OSOS_SONGS_SCREEN 0x0dad07e9          /* MediaLists_Songs_Screen */
+#define OSOS_SONGS_PLAIN_LAYOUT 0x0dad07ea    /* MediaLists_Songs_Screen_Plain */
+#define OSOS_MUSIC_CONFIGURE_BROWSER 0x08223ab8
+#define OSOS_BROWSER_SELECT_ALBUM 0x0805b528
+#define OSOS_BROWSER_ALBUM_NAME 0x08047a34
+/* UI_TransitionToLayout restores the new screen's saved list positions through this
+ * call; each screen's saved position (looked up, or created, per screen and layout)
+ * keeps its selected row in word 2, which native code zeroes for Extras and Settings. */
+#define OSOS_UI_RESTORE_POSITIONS_CALL 0x08175b1c
+#define OSOS_UI_RESTORE_POSITIONS 0x08174878
+#define OSOS_UI_SAVED_POSITION 0x08178660
+#define OSOS_UI_SAVED_ROW_WORD 2
+/* The pushed list's status bar title; the native Albums list sets it on select. */
+#define OSOS_LIST_TITLE_MODEL 0x08169178
+#define OSOS_LIST_TITLE_SET 0x08169c7c
+/* Cover Flow's artwork session: a worker loads a window of covers from the current
+ * music query around a center album; lookups return only covers already loaded. */
+#define OSOS_ARTWORK_SESSION_BYTES 0x8ac
+#define OSOS_ARTWORK_SESSION_CONSTRUCT 0x08216a90
+#define OSOS_ARTWORK_SESSION_DESTROY 0x08222298
+#define OSOS_ARTWORK_SESSION_ATTACH 0x0821674c
+#define OSOS_ARTWORK_SESSION_SET_FORMAT 0x08216a24
+#define OSOS_ARTWORK_SESSION_BIND_QUERY 0x082168b0
+#define OSOS_ARTWORK_SESSION_CENTER 0x082221f0
+#define OSOS_ARTWORK_SESSION_START 0x08221d80
+#define OSOS_ARTWORK_SESSION_LOOKUP 0x082168f0
+#define OSOS_ARTWORK_FORMAT_COVER 0xf /* 128x128 RGB565 (1055), Cover Flow's format */
+#define OSOS_SURFACE_WRITE_BEGIN 0x0809f57c
+#define OSOS_SURFACE_WRITE_END 0x080a7a90
+/* The UI loop's clock: read the microsecond counter, then convert it to
+ * milliseconds. */
+#define OSOS_UI_CLOCK_READ 0x0807bfe8
+#define OSOS_UI_CLOCK_MILLISECONDS 0x08262f5c
+/* Frame clients: objects whose vtable slot 0 the UI loop calls before each frame
+ * renders and slot 1 after it; adding a registered client does nothing. */
+#define OSOS_FRAME_CLIENT_ADD 0x08289190
+#define OSOS_FRAME_CLIENT_REMOVE 0x082892e0

@@ -21,6 +21,11 @@ class Item:
     slot: int = 0
     default_index: int = 0
     text_file: str = ""
+    controller: str = ""
+    # Canvas view factory type, four ASCII letters stored big-endian.
+    view: str = ""
+    # Settings-model string property shown in a marquee line below a canvas.
+    caption: str = ""
     hide_when_zero: bool = False
     items: list["Item"] = field(default_factory=list)
 

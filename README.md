@@ -48,6 +48,8 @@ RepriseOS package and builds a companion using that iPod's identity.
 - Album Artists browsing with Artist fallback and configurable menu visibility.
 - Clicker output options (Off, Speaker, Headphones, Both) in Settings.
 - Dark Mode, with an On/Off toggle in Settings.
+- Cover Grid, a scrollable grid of album covers next to Cover Flow in the main
+  and Music menus, with configurable menu visibility ([details](docs/cover-grid.md)).
 
 Open **Settings → Custom EQ → Graphic EQ** to edit all five bands. Use the wheel
 to select a band, then Center to select and edit its Type, Gain, Frequency or Q.

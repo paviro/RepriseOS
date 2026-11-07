@@ -336,6 +336,114 @@ class UiTests(unittest.TestCase):
         self.assertIn(b"navigator.PushScreen", appended)
         self.assertNotIn(b"ShowSetting_Legal", appended)
 
+    def test_cover_grid_row_sits_after_cover_flow_without_a_cloned_screen(self):
+        root = Path(__file__).resolve().parents[2]
+        metadata = json.loads((root / "firmware/ui.json").read_text())
+        bindings = json.loads((root / "payload/native/ui.json").read_text())["bindings"]
+        resources = Resources(metadata["resources"], bindings)
+        document = parser.read(root / "payload/cover_grid.ui")
+        compiled = compile_document(resources, document)
+        self.assertNotIn("CFW_CoverGrid_Screen", compiled.string_ids)
+        self.assertNotIn("CFW_CoverGrid_Layout", compiled.string_ids)
+        self.assertFalse([key for key in resources.added if key[0] in ("SCST", "SLst")])
+        for menu, anchor_name, visible in (
+            ("Main", "MainMenu_List_Coverflow", 0),
+            ("Music", "MainMenu_Music_List_CoverFlow", 1),
+        ):
+            rows = menu_rows(resources, bindings[menu + "Menu_Items"])
+            anchor = next(
+                i
+                for i, (_, row) in enumerate(rows)
+                if word(row, 0x30) == bindings[anchor_name]
+            )
+            row = rows[anchor + 1][1]
+            item = compiled.string_ids[f"CFW_CoverGrid_{menu}Item"]
+            self.assertEqual(word(row, 0x30), item)
+            self.assertEqual(word(row, 0x64) & 0xFF, visible)
+            title = resources.added["SORC", word(row, 0x68)]
+            self.assertEqual(
+                word(blocks(title)[0][1], 4), compiled.string_ids["CFW_CoverGrid_Title"]
+            )
+            events = b"".join(
+                resources.event_extensions["CEVT", bindings[f"MainMenus_{menu}_Screen"]]
+            )
+            self.assertIn(f"list.pid.{item}.chosen".encode(), events)
+            self.assertIn(b"CFW_CoverGrid", events)
+            self.assertIn(f"list.pid.{item}.delayedselected".encode(), events)
+            self.assertIn(b"HandleMusicHilited", events)
+        [entry] = resources.visibility
+        self.assertEqual(entry["defaults"], 2)
+        for attribute in ('screen="S"', 'layout="L"'):
+            with self.assertRaises(ValueError):
+                parser.parse(f"""<ui><music-entry id="Entry" title="Entry" after="A"
+                    open="O" highlight="H" {attribute}/></ui>""")
+
+    def test_cover_grid_canvas_has_its_controller_view_and_marquee_caption(self):
+        root = Path(__file__).resolve().parents[2]
+        metadata = json.loads((root / "firmware/ui.json").read_text())
+        bindings = json.loads((root / "payload/native/ui.json").read_text())["bindings"]
+        resources = Resources(metadata["resources"], bindings)
+        with tempfile.TemporaryDirectory() as directory:
+            generate(
+                resources,
+                [root / "payload/cover_grid_screen.ui"],
+                Path(directory),
+                "test",
+            )
+            header = (Path(directory) / "cover_grid_screen_ui.h").read_text()
+        for name in ("Screen", "Layout", "Title", "TitleString", "Caption"):
+            self.assertIn(f"#define CFW_CoverGridView_{name} ", header)
+        screen = resources.names["CFW_CoverGridView_Screen"]
+        controller = resources.added["SCST", screen]
+        self.assertEqual(bytes(controller.data), b"CFWCoverGrid")
+        title_id = int(
+            re.search(r"#define CFW_CoverGridView_Title (0x[0-9a-f]+)u", header).group(
+                1
+            ),
+            16,
+        )
+        title = resources.added["SORC", title_id]
+        self.assertEqual(
+            word(blocks(title)[0][1], 4),
+            resources.names["CFW_CoverGridView_TitleString"],
+        )
+        views = next(
+            blocks(data)
+            for (kind, _), data in resources.added.items()
+            if kind == "View" and any(k == 0x63667767 for k, _ in blocks(data))
+        )
+        (canvas_kind, canvas), (bar_kind, bar), (caption_kind, caption) = views
+        self.assertEqual(canvas_kind, 0x63667767)
+        self.assertEqual(word(canvas, 0x18), 217)
+        # The bottom bar reuses the status bar's image and title marquee.
+        self.assertEqual(bar_kind, 0x696D6167)
+        self.assertEqual(struct.unpack_from("<i", bytes(bar.data), 0x0C)[0], 218)
+        # The grid stops its covers where the bar starts.
+        grid_header = (root / "payload/cover_grid_view.h").read_text()
+        grid_caption = int(re.search(r"CFW_GRID_CAPTION = (\d+)", grid_header).group(1))
+        self.assertEqual(23 + word(canvas, 0x18) - grid_caption, 218)
+        self.assertEqual(caption_kind, 0x74657874)
+        self.assertEqual(word(caption, 0x5C), 5)  # marquee
+        source = resources.added["SORC", word(caption, 0x64)]
+        binding = blocks(source)[0][1]
+        self.assertEqual(
+            (word(binding, 0), word(binding, 4)),
+            (0x8900, resources.names["CFW_CoverGridView_Caption"]),
+        )
+        # Font and color stay inherited from the status bar title.
+        self.assertIsNotNone(caption.origins[0x68])
+        self.assertIsNotNone(caption.origins[0x70])
+
+    def test_canvas_controller_requires_a_view_type(self):
+        for attributes in (
+            'controller="CFWCoverGrid"',
+            'view="cfwg"',
+            'controller="CFWCoverGrid" view="grid1"',
+            'caption="bad name"',
+        ):
+            with self.assertRaises(ValueError):
+                parser.parse(f'<ui><canvas id="X" title="X" {attributes}/></ui>')
+
     def test_settings_toggle_preserves_stock_rows_and_has_no_navigation(self):
         root = Path(__file__).resolve().parents[2]
         metadata = json.loads((root / "firmware/ui.json").read_text())

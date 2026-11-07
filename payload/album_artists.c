@@ -550,11 +550,11 @@ done:
     osos_model_ref_release(&reference);
 }
 
-PATCH_ARM int cfw_album_artists_action(void *controller, const char *action,
-                                       uint32_t argument)
+/* Main and Music menu actions: the Album Artists row opens the browser. */
+int cfw_album_artists_menu_action(void *controller, const char *action, uint32_t argument)
 {
     if (!cfw_string_equal(action, "CFW_AlbumArtists"))
-        return osos_music_action(controller, action, argument);
+        return 0;
     if (argument != OSOS_ACTION_SUPPORT_QUERY)
         open_browser(controller);
     return 1;
