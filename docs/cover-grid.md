@@ -15,10 +15,18 @@ that album still exists.
 ## Layout
 
 The grid is four columns of 77 by 77 covers with 2 px gaps and 3 px outer
-margins, filling the 320 px width. The selected cover's 2 px ring is drawn in
-the surrounding gap, so it never covers artwork. Two rows fit above the caption
-bar and a third peeks in below them. The view scrolls by whole rows once the
-selection leaves the two full rows.
+margins, filling the 320 px width. Each cover has a 1 px hairline inside its
+edge, the text color at 15%, so covers stay distinct from a background of their
+own tone in light and dark mode. Two rows fit above the caption bar and a third
+peeks in below them. The view scrolls by whole rows once the selection leaves
+the two full rows.
+
+The selected cover is lifted: drawn at 87 by 87 over its neighbors, inside a
+2 px edge in the selection color and a 3 px shadow that fades out 1 px lower.
+Near the screen's edges, the lifted cover shifts inward so that its edge stays
+visible; it still hides the cover beneath it. The edge marks the selection on
+any artwork, including dark covers in dark mode, where the shadow alone would
+not show.
 
 ## Artwork
 
@@ -35,8 +43,13 @@ to 77 by 77 with a box filter, at most four per frame, and written into the
 RGB565 or ARGB8888 UI surface inside the canvas's clip. Albums without a loaded
 cover show Cover Flow's placeholder, downscaled once. Covers outside the clip
 are skipped, so a scrolling caption redraws only its strip. Moving the
-selection within the visible rows redraws the two affected covers, and a newly
-loaded cover redraws only itself.
+selection within the visible rows redraws the old and new lifted areas, and a
+newly loaded cover redraws only itself, or its lifted area when selected.
+
+The lifted cover is not cached. Each draw box-filters it from the session's
+128 px cover, or from Cover Flow's placeholder, one row at a time and only for
+the rows and columns inside the clip, so the lift needs no memory beyond the
+grid-size cache.
 
 The twelve visible covers and the placeholder are cached by artwork ID. The
 native UI keeps the view alive after the grid is left, until the grid next

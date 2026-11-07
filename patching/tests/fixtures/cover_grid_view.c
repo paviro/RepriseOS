@@ -701,16 +701,21 @@ static void check_input(void)
     int notified = notifications;
     assert(wheel(1) == 1 && invalidations == before && notifications == notified);
     /* Moving within the visible rows does not move the session and redraws only
-     * the two covers with their rings, in window coordinates. */
+     * the two lifted areas with their edge and shadow, in window coordinates. */
     int centered = centers;
     before = invalidations;
     assert(wheel(-1) == 1 && centers == centered && invalidations == before + 2);
     int row = grid.selected / CFW_GRID_COLUMNS - grid.top;
     int column = grid.selected % CFW_GRID_COLUMNS;
-    assert(invalidated[0] == 23 + 1 + row * CFW_GRID_PITCH);
-    assert(invalidated[1] == 1 + column * CFW_GRID_PITCH);
-    assert(invalidated[2] - invalidated[0] == RING_SIZE);
-    assert(invalidated[3] - invalidated[1] == RING_SIZE);
+    int x = CFW_GRID_MARGIN + column * CFW_GRID_PITCH;
+    int y = CFW_GRID_MARGIN + row * CFW_GRID_PITCH, lx, ly;
+    lift_origin(x, y, 320, 217 - CFW_GRID_CAPTION, &lx, &ly);
+    /* A left-column cover lifts rightward so that its edge stays on screen. */
+    assert(column == 0 && lx == CFW_GRID_EDGE && ly == y - CFW_GRID_LIFT);
+    assert(invalidated[0] == 23 + ly - DECOR);
+    assert(invalidated[1] == lx - DECOR);
+    assert(invalidated[2] - invalidated[0] == CFW_GRID_LIFT_SIZE + 2 * DECOR);
+    assert(invalidated[3] - invalidated[1] == CFW_GRID_LIFT_SIZE + 2 * DECOR);
 
     uint32_t press[] = {0, OSOS_EVENT_BUTTON_PRESS, 0, 0, OSOS_KEY_CENTER};
     assert(grid_event(0, press) == 77 && delegated == 1);
@@ -726,6 +731,11 @@ static void check_input(void)
     cover_loaded(0, 0, first);
     cover_loaded(0, 0, first + VISIBLE_COVERS - 1);
     assert(invalidations == before + 2);
+    /* An unselected cover redraws only itself. */
+    assert(first != grid.selected &&
+           invalidated[0] == 23 + CFW_GRID_MARGIN + 2 * CFW_GRID_PITCH);
+    assert(invalidated[2] - invalidated[0] == CFW_GRID_COVER);
+    assert(invalidated[3] - invalidated[1] == CFW_GRID_COVER);
 }
 
 static void check_list_position(void)
@@ -809,7 +819,8 @@ static void check_late_covers(void)
     assert(frame_client == &grid_client);
     grid_tick(0);
     assert(invalidations == before + 2 && !grid.late);
-    assert(invalidated[0] == 23 + 1 + CFW_GRID_PITCH && invalidated[1] == 1 + CFW_GRID_PITCH);
+    assert(invalidated[0] == 23 + CFW_GRID_MARGIN + CFW_GRID_PITCH &&
+           invalidated[1] == CFW_GRID_MARGIN + CFW_GRID_PITCH);
     assert(!frame_client && frame_removes == removes + 1);
 }
 

@@ -15,8 +15,13 @@ enum {
     CFW_GRID_COVER = 77,
     CFW_GRID_GAP = 2,
     CFW_GRID_MARGIN = 3,
-    CFW_GRID_RING = 2,
     CFW_GRID_PITCH = CFW_GRID_COVER + CFW_GRID_GAP,
+    /* The selected cover grows by this much on each side, inside a selection-colored
+     * edge and a shadow. */
+    CFW_GRID_LIFT = 5,
+    CFW_GRID_LIFT_SIZE = CFW_GRID_COVER + 2 * CFW_GRID_LIFT,
+    CFW_GRID_EDGE = 2,
+    CFW_GRID_SHADOW = 3,
     /* Visible height of the bottom bar holding the caption, cloned from the status
      * bar by patching/ui/compiler.py (CAPTION_TOP); its shadow rows fall below the
      * screen. */

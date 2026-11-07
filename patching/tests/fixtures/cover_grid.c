@@ -35,10 +35,15 @@ static void check_geometry(void)
     assert(2 * CFW_GRID_MARGIN + CFW_GRID_COLUMNS * CFW_GRID_COVER +
                (CFW_GRID_COLUMNS - 1) * CFW_GRID_GAP ==
            320);
-    /* The selection ring fits in the gap and the margin. */
-    assert(CFW_GRID_RING <= CFW_GRID_GAP && CFW_GRID_RING <= CFW_GRID_MARGIN);
     /* Two full rows fit above the caption bar; the third peeks in. */
     int height = 217 - CFW_GRID_CAPTION;
+    /* Shifted inward at the screen's edges, the lifted cover still hides the cover
+     * beneath it, and a second-row lift with its edge and shadow stays above the
+     * caption bar. */
+    assert(CFW_GRID_EDGE - (CFW_GRID_MARGIN - CFW_GRID_LIFT) <= 2 * CFW_GRID_LIFT);
+    assert(CFW_GRID_MARGIN + (CFW_GRID_FULL_ROWS - 1) * CFW_GRID_PITCH +
+               CFW_GRID_COVER + CFW_GRID_LIFT + CFW_GRID_EDGE + CFW_GRID_SHADOW + 1 <=
+           height);
     assert(CFW_GRID_MARGIN + CFW_GRID_FULL_ROWS * CFW_GRID_PITCH - CFW_GRID_GAP <=
            height);
     assert(CFW_GRID_MARGIN + (CFW_GRID_FULL_ROWS + 1) * CFW_GRID_PITCH - CFW_GRID_GAP >

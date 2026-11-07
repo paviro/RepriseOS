@@ -166,40 +166,59 @@ static inline uint32_t spread(uint32_t pixel)
     return (pixel | pixel << 16) & 0x07e0f81fu;
 }
 
-/* Box filter from the 128 px source; each output pixel averages the 2 or 3 by 2 or 3
- * source pixels it covers. ARM code, for the registers the inner loop needs. */
-static PATCH_ARM void downscale(uint16_t *out, const unsigned char *pixels,
-                                uint32_t row_bytes)
+/* The source pixels each output pixel covers at one output size: the first of 2 or 3
+ * per axis. */
+struct scale {
+    unsigned char first[CFW_GRID_LIFT_SIZE], span[CFW_GRID_LIFT_SIZE];
+};
+
+static void scale_init(struct scale *scale, int size)
 {
-    unsigned char first[CFW_GRID_COVER], span[CFW_GRID_COVER];
-    for (int i = 0; i < CFW_GRID_COVER; i++) {
-        first[i] = (unsigned char)(i * SOURCE_SIZE / CFW_GRID_COVER);
-        span[i] = (unsigned char)(((i + 1) * SOURCE_SIZE + CFW_GRID_COVER - 1) /
-                                      CFW_GRID_COVER -
-                                  first[i]);
+    for (int i = 0; i < size; i++) {
+        scale->first[i] = (unsigned char)(i * SOURCE_SIZE / size);
+        scale->span[i] = (unsigned char)(((i + 1) * SOURCE_SIZE + size - 1) / size -
+                                         scale->first[i]);
     }
-    for (int y = 0; y < CFW_GRID_COVER; y++) {
-        const uint16_t *row0 = (const uint16_t *)(pixels + first[y] * row_bytes);
-        const uint16_t *row1 = (const uint16_t *)((const unsigned char *)row0 + row_bytes);
-        const uint16_t *row2 = (const uint16_t *)((const unsigned char *)row1 + row_bytes);
-        int tall = span[y] == 3;
-        for (int x = 0; x < CFW_GRID_COVER; x++) {
-            int c = first[x], wide = span[x] == 3;
-            uint32_t sum = spread(row0[c]) + spread(row0[c + 1]) + spread(row1[c]) +
-                           spread(row1[c + 1]);
+}
+
+/* Box filter from the 128 px source: pixels [x0, x1) of output row y, written from
+ * out onward. Each output pixel averages the 2 or 3 by 2 or 3 source pixels it
+ * covers. ARM code, for the registers the inner loop needs. */
+static PATCH_ARM void scale_row(uint16_t *out, const struct scale *scale,
+                                const unsigned char *pixels, uint32_t row_bytes, int y,
+                                int x0, int x1)
+{
+    const unsigned char *first = scale->first, *span = scale->span;
+    const uint16_t *row0 = (const uint16_t *)(pixels + first[y] * row_bytes);
+    const uint16_t *row1 = (const uint16_t *)((const unsigned char *)row0 + row_bytes);
+    const uint16_t *row2 = (const uint16_t *)((const unsigned char *)row1 + row_bytes);
+    int tall = span[y] == 3;
+    for (int x = x0; x < x1; x++) {
+        int c = first[x], wide = span[x] == 3;
+        uint32_t sum = spread(row0[c]) + spread(row0[c + 1]) + spread(row1[c]) +
+                       spread(row1[c + 1]);
+        if (wide)
+            sum += spread(row0[c + 2]) + spread(row1[c + 2]);
+        if (tall) {
+            sum += spread(row2[c]) + spread(row2[c + 1]);
             if (wide)
-                sum += spread(row0[c + 2]) + spread(row1[c + 2]);
-            if (tall) {
-                sum += spread(row2[c]) + spread(row2[c + 1]);
-                if (wide)
-                    sum += spread(row2[c + 2]);
-            }
-            uint32_t n = (uint32_t)span[y] * span[x];
-            *out++ = (uint16_t)(divide_rounded(sum >> 11 & 0x3ff, n) << 11 |
-                                divide_rounded(sum >> 21, n) << 5 |
-                                divide_rounded(sum & 0x7ff, n));
+                sum += spread(row2[c + 2]);
         }
+        uint32_t n = (uint32_t)span[y] * span[x];
+        *out++ = (uint16_t)(divide_rounded(sum >> 11 & 0x3ff, n) << 11 |
+                            divide_rounded(sum >> 21, n) << 5 |
+                            divide_rounded(sum & 0x7ff, n));
     }
+}
+
+/* A whole cover at grid size. */
+static void downscale(uint16_t *out, const unsigned char *pixels, uint32_t row_bytes)
+{
+    struct scale scale;
+    scale_init(&scale, CFW_GRID_COVER);
+    for (int y = 0; y < CFW_GRID_COVER; y++)
+        scale_row(out + y * CFW_GRID_COVER, &scale, pixels, row_bytes, y, 0,
+                  CFW_GRID_COVER);
 }
 
 /* Row bytes of a 128 px RGB565 bitmap {.., u16 row bytes @4, u16 bits @6,
@@ -344,36 +363,49 @@ static void fill_expand_table(uint32_t *table)
     }
 }
 
-/* Copies a downscaled cover; returns 0 for a surface it cannot write, which then
- * shows the placeholder. ARM code, for the registers the copy loops need. */
-static PATCH_ARM int blit(void *context, int32_t top, int32_t left, int32_t bottom,
-                          const uint16_t *pixels)
+/* Writes RGB565 pixels to surface row y, columns [x0, x1). ARM code, for the
+ * registers the copy loops need. */
+static PATCH_ARM void write_row(const struct surface_region *region, int32_t y,
+                                int32_t x0, int32_t x1, const uint16_t *in)
+{
+    unsigned char *row = surface_row(region, y);
+    if (region->shift == 4) {
+        uint16_t *out = (uint16_t *)row + x0;
+        for (int32_t x = x0; x < x1; x++)
+            *out++ = *in++;
+        return;
+    }
+    const uint32_t *high = expand_table(), *low = high + 256;
+    uint32_t *out = (uint32_t *)row + x0;
+    for (int32_t x = x0; x < x1; x++) {
+        uint32_t p = *in++;
+        *out++ = high[p >> 8] | low[p & 0xff];
+    }
+}
+
+/* Copies a size by size image: a downscaled cover from pixels, or, with a source,
+ * the 128 px source box-filtered row by row, so the lifted cover needs no buffer.
+ * Returns 0 for a surface it cannot write, which then shows a plain tile. */
+static int blit(void *context, int32_t top, int32_t left, int32_t bottom, int size,
+                const uint16_t *pixels, const unsigned char *source, uint32_t row_bytes)
 {
     struct surface_region region;
-    if (!surface_region(context, top, left, CFW_GRID_COVER, CFW_GRID_COVER, bottom,
-                        &region))
+    if (!surface_region(context, top, left, size, size, bottom, &region))
         return 0;
     int32_t y0 = region.dirty[0], x0 = region.dirty[1];
     int32_t y1 = region.dirty[2], x1 = region.dirty[3];
     if (y0 >= y1 || x0 >= x1)
         return 1;
+    struct scale scale;
+    uint16_t line[CFW_GRID_LIFT_SIZE];
+    if (source)
+        scale_init(&scale, size);
     ((surface_write_fn)OSOS_SURFACE_WRITE_BEGIN)(region.surface, region.dirty);
     for (int32_t y = y0; y < y1; y++) {
-        unsigned char *row = surface_row(&region, y);
-        const uint16_t *in =
-            pixels + (y - region.top) * CFW_GRID_COVER + (x0 - region.left);
-        if (region.shift == 4) {
-            uint16_t *out = (uint16_t *)row + x0;
-            for (int32_t x = x0; x < x1; x++)
-                *out++ = *in++;
-            continue;
-        }
-        const uint32_t *high = expand_table(), *low = high + 256;
-        uint32_t *out = (uint32_t *)row + x0;
-        for (int32_t x = x0; x < x1; x++) {
-            uint32_t p = *in++;
-            *out++ = high[p >> 8] | low[p & 0xff];
-        }
+        int sy = y - region.top, sx = x0 - region.left;
+        if (source)
+            scale_row(line, &scale, source, row_bytes, sy, sx, x1 - region.left);
+        write_row(&region, y, x0, x1, source ? line : pixels + sy * size + sx);
     }
     ((surface_write_fn)OSOS_SURFACE_WRITE_END)(region.surface, region.dirty);
     return 1;
@@ -414,6 +446,24 @@ static uint32_t mix(uint32_t over, uint32_t under, uint32_t alpha)
     return divide_255(over * alpha + under * (255 - alpha) + 127);
 }
 
+/* Blends (r, g, b) over the pixel at x of a surface row by alpha (0-255). */
+static void mix_pixel(unsigned char *row, int32_t x, unsigned shift, uint32_t r,
+                      uint32_t g, uint32_t b, uint32_t alpha)
+{
+    if (shift == 4) {
+        uint16_t *out = (uint16_t *)row + x;
+        uint32_t r0 = *out >> 11, g0 = (*out >> 5) & 63, b0 = *out & 31;
+        r = mix(r, r0 << 3 | r0 >> 2, alpha);
+        g = mix(g, g0 << 2 | g0 >> 4, alpha);
+        b = mix(b, b0 << 3 | b0 >> 2, alpha);
+        *out = (uint16_t)((r >> 3) << 11 | (g >> 2) << 5 | b >> 3);
+    } else {
+        uint32_t *out = (uint32_t *)row + x;
+        *out = 0xff000000u | mix(r, (*out >> 16) & 255, alpha) << 16 |
+               mix(g, (*out >> 8) & 255, alpha) << 8 | mix(b, *out & 255, alpha);
+    }
+}
+
 /* Blends rows [first, first + rows) of a palettized bitmap at alpha (0-255) of its
  * own transparency. */
 static void blend(void *context, int32_t top, int32_t left, int32_t bottom,
@@ -438,21 +488,8 @@ static void blend(void *context, int32_t top, int32_t left, int32_t bottom,
             uint32_t index = *in < bitmap->colors ? *in : 0;
             const unsigned char *color = bitmap->palette + 4 * index;
             uint32_t a = divide_255(color[3] * alpha);
-            if (!a)
-                continue;
-            if (region.shift == 4) {
-                uint16_t *out = (uint16_t *)row + x;
-                uint32_t r = *out >> 11, g = (*out >> 5) & 63, b = *out & 31;
-                r = mix(color[2], r << 3 | r >> 2, a);
-                g = mix(color[1], g << 2 | g >> 4, a);
-                b = mix(color[0], b << 3 | b >> 2, a);
-                *out = (uint16_t)((r >> 3) << 11 | (g >> 2) << 5 | b >> 3);
-            } else {
-                uint32_t *out = (uint32_t *)row + x;
-                *out = 0xff000000u | mix(color[2], (*out >> 16) & 255, a) << 16 |
-                       mix(color[1], (*out >> 8) & 255, a) << 8 |
-                       mix(color[0], *out & 255, a);
-            }
+            if (a)
+                mix_pixel(row, x, region.shift, color[2], color[1], color[0], a);
         }
     }
     ((surface_write_fn)OSOS_SURFACE_WRITE_END)(region.surface, region.dirty);
@@ -490,12 +527,52 @@ static void fill(const struct canvas *canvas, int x, int y, int width, int heigh
     osos_graphics_fill_rect_unmapped(canvas->context, rect);
 }
 
+/* Blends a view-local rectangle, cut at bottom, toward an opaque color by alpha. */
+static void tint(const struct canvas *canvas, int x, int y, int width, int height,
+                 int bottom, const unsigned char *color, uint32_t alpha)
+{
+    struct surface_region region;
+    if (!surface_region(canvas->context, canvas->bounds[0] + y, canvas->bounds[1] + x,
+                        height, width, canvas->bounds[0] + bottom, &region))
+        return;
+    int32_t y0 = region.dirty[0], x0 = region.dirty[1];
+    int32_t y1 = region.dirty[2], x1 = region.dirty[3];
+    if (y0 >= y1 || x0 >= x1)
+        return;
+    ((surface_write_fn)OSOS_SURFACE_WRITE_BEGIN)(region.surface, region.dirty);
+    for (int32_t py = y0; py < y1; py++) {
+        unsigned char *row = surface_row(&region, py);
+        for (int32_t px = x0; px < x1; px++)
+            mix_pixel(row, px, region.shift, color[0], color[1], color[2], alpha);
+    }
+    ((surface_write_fn)OSOS_SURFACE_WRITE_END)(region.surface, region.dirty);
+}
+
+/* The outline of a square, thick pixels wide inside it: tinted by alpha, or filled
+ * opaque when alpha is 255. */
+static void frame(const struct canvas *canvas, int x, int y, int size, int thick,
+                  int bottom, const unsigned char *color, uint32_t alpha)
+{
+    const int rects[4][4] = {{x, y, size, thick},
+                             {x, y + size - thick, size, thick},
+                             {x, y + thick, thick, size - 2 * thick},
+                             {x + size - thick, y + thick, thick, size - 2 * thick}};
+    for (int i = 0; i < 4; i++) {
+        const int *r = rects[i];
+        if (alpha == 255)
+            fill(canvas, r[0], r[1], r[2], r[3], color);
+        else
+            tint(canvas, r[0], r[1], r[2], r[3], bottom, color, alpha);
+    }
+}
+
 enum {
     COLOR_BACKGROUND,
     COLOR_TILE,
-    COLOR_RING,
+    COLOR_SELECTION,
+    /* The hairline around each cover: the text color, applied at BORDER_ALPHA. */
+    COLOR_BORDER,
     COLOR_COUNT,
-    RING_SIZE = CFW_GRID_COVER + 2 * CFW_GRID_RING,
     /* After deactivation, the covers and the session are released once the view
      * has not drawn for this long, which outlasts the pop and push transitions. */
     RELEASE_DELAY_MS = 1000,
@@ -507,11 +584,25 @@ static int min_int(int a, int b)
 }
 
 /* Light and dark: the list background, an empty-cover tile 11% toward the text
- * color, and the selection blue. */
+ * color, the selection blue and the text color. */
 static const unsigned char grid_colors[2][COLOR_COUNT][4] = {
-    {{255, 255, 255, 255}, {231, 231, 231, 255}, {35, 108, 197, 255}},
-    {{24, 24, 24, 255}, {47, 47, 47, 255}, {0, 161, 255, 255}},
+    {{255, 255, 255, 255},
+     {231, 231, 231, 255},
+     {35, 108, 197, 255},
+     {32, 32, 32, 255}},
+    {{24, 24, 24, 255}, {47, 47, 47, 255}, {0, 161, 255, 255}, {232, 232, 232, 255}},
 };
+
+/* The hairline separates covers from a background of their own tone. The lifted
+ * cover's shadow fades out over CFW_GRID_SHADOW rings around its edge, 1 px lower. */
+enum {
+    BORDER_ALPHA = 38,
+    /* Pixels the lifted cover's edge and shadow reach beyond it. */
+    DECOR = CFW_GRID_EDGE + CFW_GRID_SHADOW + 1,
+};
+
+static const unsigned char shadow_color[4] = {0, 0, 0, 255};
+static const unsigned char shadow_alpha[CFW_GRID_SHADOW] = {72, 38, 14};
 
 /* The stock list scrollbar over the right column, as list scrollbars sit over their
  * rows. Like native lists (0x081ae814), it shows when the grid scrolls, holds for
@@ -553,15 +644,35 @@ static void invalidate_area(int x, int y, int width, int height)
     ((invalidate_fn)OSOS_VIEW_INVALIDATE_RECT)(root, rect);
 }
 
-/* Redraws one visible cover with its selection ring. */
-static void invalidate_cover(int index)
+/* The lifted cover's origin for the cover at x, y: centered on it and shifted inward
+ * so that its edge stays inside the width and above the caption bar. */
+static void lift_origin(int x, int y, int width, int height, int *lx, int *ly)
+{
+    *lx = cfw_clamp(x - CFW_GRID_LIFT, CFW_GRID_EDGE,
+                    width - CFW_GRID_LIFT_SIZE - CFW_GRID_EDGE);
+    *ly = cfw_clamp(y - CFW_GRID_LIFT, CFW_GRID_EDGE,
+                    height - CFW_GRID_LIFT_SIZE - CFW_GRID_EDGE);
+}
+
+/* Redraws one visible cover, or with lifted the area it covers when selected,
+ * including its edge and shadow. */
+static void invalidate_cover(int index, int lifted)
 {
     int row = index / CFW_GRID_COLUMNS - grid.top;
-    if (index < 0 || row < 0 || row >= VISIBLE_ROWS)
+    unsigned char *view = grid.view;
+    if (index < 0 || row < 0 || row >= VISIBLE_ROWS || !view)
         return;
     int x = CFW_GRID_MARGIN + index % CFW_GRID_COLUMNS * CFW_GRID_PITCH;
     int y = CFW_GRID_MARGIN + row * CFW_GRID_PITCH;
-    invalidate_area(x - CFW_GRID_RING, y - CFW_GRID_RING, RING_SIZE, RING_SIZE);
+    if (!lifted) {
+        invalidate_area(x, y, CFW_GRID_COVER, CFW_GRID_COVER);
+        return;
+    }
+    const int32_t *frame = (const int32_t *)(view + 0x80);
+    lift_origin(x, y, frame[3] - frame[1], frame[2] - frame[0] - CFW_GRID_CAPTION, &x,
+                &y);
+    invalidate_area(x - DECOR, y - DECOR, CFW_GRID_LIFT_SIZE + 2 * DECOR,
+                    CFW_GRID_LIFT_SIZE + 2 * DECOR);
 }
 
 static uint32_t scrollbar_alpha(void)
@@ -682,17 +793,33 @@ static void draw_gaps(const struct canvas *canvas, int width, int height, int fu
     fill(canvas, 0, height, width, full - height, color);
 }
 
-/* The selection ring, drawn in the gap around the cover and cut at the caption bar. */
-static void draw_ring(const struct canvas *canvas, int x, int y, int below,
-                      const unsigned char *color)
+/* The selected cover, lifted over its neighbors: its shadow, its selection-colored
+ * edge, then its art box-filtered from the session's 128 px cover or Cover Flow's
+ * placeholder. */
+static void draw_lifted(const struct canvas *canvas, int x, int y, int width,
+                        int height, const unsigned char (*colors)[4])
 {
-    int side = min_int(below, CFW_GRID_COVER);
-    fill(canvas, x - CFW_GRID_RING, y - CFW_GRID_RING, RING_SIZE, CFW_GRID_RING, color);
-    fill(canvas, x - CFW_GRID_RING, y, CFW_GRID_RING, side, color);
-    fill(canvas, x + CFW_GRID_COVER, y, CFW_GRID_RING, side, color);
-    if (below > CFW_GRID_COVER)
-        fill(canvas, x - CFW_GRID_RING, y + CFW_GRID_COVER, RING_SIZE,
-             min_int(below - CFW_GRID_COVER, CFW_GRID_RING), color);
+    int edge = CFW_GRID_LIFT_SIZE + 2 * CFW_GRID_EDGE;
+    lift_origin(x, y, width, height, &x, &y);
+    if (!in_clip(canvas, x - DECOR, y - DECOR, CFW_GRID_LIFT_SIZE + 2 * DECOR,
+                 CFW_GRID_LIFT_SIZE + 2 * DECOR))
+        return;
+    for (int d = CFW_GRID_SHADOW; d >= 1; d--)
+        frame(canvas, x - CFW_GRID_EDGE - d, y - CFW_GRID_EDGE - d + 1, edge + 2 * d, 1,
+              height, shadow_color, shadow_alpha[d - 1]);
+    frame(canvas, x - CFW_GRID_EDGE, y - CFW_GRID_EDGE, edge, CFW_GRID_EDGE, height,
+          colors[COLOR_SELECTION], 255);
+    const unsigned char *source = session_cover(grid.selected);
+    uint32_t row_bytes = SOURCE_SIZE * 2;
+    if (!source) {
+        source = (const unsigned char *)osos_ui_bitmap(PLACEHOLDER_BITMAP);
+        row_bytes = source_row_bytes(source);
+        source = row_bytes ? source + 0x1c : 0;
+    }
+    const int32_t *bounds = canvas->bounds;
+    if (!source || !blit(canvas->context, bounds[0] + y, bounds[1] + x,
+                         bounds[0] + height, CFW_GRID_LIFT_SIZE, 0, source, row_bytes))
+        fill(canvas, x, y, CFW_GRID_LIFT_SIZE, CFW_GRID_LIFT_SIZE, colors[COLOR_TILE]);
 }
 
 static PATCH_ARM void grid_draw(void *view, void *draw_argument, const int32_t *clip)
@@ -721,6 +848,7 @@ static PATCH_ARM void grid_draw(void *view, void *draw_argument, const int32_t *
     int count = grid_count();
     int budget = SCALES_PER_DRAW;
     unsigned late = 0;
+    int lifted_x = -1, lifted_y = 0;
     for (int row = 0; row < VISIBLE_ROWS; row++) {
         int y = CFW_GRID_MARGIN + row * CFW_GRID_PITCH;
         int below = height - y;
@@ -729,10 +857,14 @@ static PATCH_ARM void grid_draw(void *view, void *draw_argument, const int32_t *
         for (int column = 0; column < CFW_GRID_COLUMNS; column++) {
             int index = (grid.top + row) * CFW_GRID_COLUMNS + column;
             int x = CFW_GRID_MARGIN + column * CFW_GRID_PITCH;
-            if (!in_clip(&canvas, x - CFW_GRID_RING, y - CFW_GRID_RING, RING_SIZE,
-                         min_int(below + CFW_GRID_RING, RING_SIZE)))
+            if (index == grid.selected && index < count) {
+                lifted_x = x;
+                lifted_y = y;
                 continue;
+            }
             int side = min_int(below, CFW_GRID_COVER);
+            if (!in_clip(&canvas, x, y, CFW_GRID_COVER, side))
+                continue;
             if (index >= count) {
                 fill(&canvas, x, y, CFW_GRID_COVER, side, background);
                 continue;
@@ -743,13 +875,15 @@ static PATCH_ARM void grid_draw(void *view, void *draw_argument, const int32_t *
                 late |= 1u << (row * CFW_GRID_COLUMNS + column);
             if (!slot)
                 slot = placeholder();
-            if (index == grid.selected)
-                draw_ring(&canvas, x, y, below, colors[COLOR_RING]);
-            if (!slot || !blit(context, bounds[0] + y, bounds[1] + x, bounds[0] + height,
-                               slot->pixels))
+            if (!slot || !blit(context, bounds[0] + y, bounds[1] + x,
+                               bounds[0] + height, CFW_GRID_COVER, slot->pixels, 0, 0))
                 fill(&canvas, x, y, CFW_GRID_COVER, side, colors[COLOR_TILE]);
+            frame(&canvas, x, y, CFW_GRID_COVER, 1, height, colors[COLOR_BORDER],
+                  BORDER_ALPHA);
         }
     }
+    if (lifted_x >= 0)
+        draw_lifted(&canvas, lifted_x, lifted_y, width, height, colors);
     draw_scrollbar(context, bounds, height, count);
     /* Covers loaded beyond the budget follow in the next frame; invalidations made
      * while the frame renders are lost, so the frame client makes them. */
@@ -789,7 +923,7 @@ static PATCH_ARM void grid_tick(void *client)
     (void)client;
     for (int cell = 0; grid.late; cell++, grid.late >>= 1)
         if (grid.late & 1)
-            invalidate_cover(grid.top * CFW_GRID_COLUMNS + cell);
+            invalidate_cover(grid.top * CFW_GRID_COLUMNS + cell, 0);
     if (grid.scrollbar_ticking && scrollbar_alpha() != grid.scrollbar_drawn) {
         unsigned char *view = grid.view;
         const int32_t *frame = view ? (const int32_t *)(view + 0x80) : 0;
@@ -827,8 +961,7 @@ static PATCH_ARM void cover_loaded(void *listener, void *item, int index)
 {
     (void)listener;
     (void)item;
-    if (grid.view)
-        invalidate_cover(index);
+    invalidate_cover(index, index == grid.selected);
 }
 
 static const uintptr_t listener_vtable[3] = {[2] = (uintptr_t)cover_loaded};
@@ -980,9 +1113,9 @@ static PATCH_ARM int grid_event(void *controller, void *event)
             scrollbar_show();
             osos_ui_invalidate();
         } else {
-            /* Only the two rings change. */
-            invalidate_cover(previous);
-            invalidate_cover(next);
+            /* Only the two lifted areas change. */
+            invalidate_cover(previous, 1);
+            invalidate_cover(next, 1);
         }
         update_caption();
         return 1;
