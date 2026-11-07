@@ -23,6 +23,7 @@ RaduTek
 Swimming33
 brilliant-alien
 kayboll
+paviro
 
 Rockbox contributors - bootloader, dual-boot installer, and hardware drivers.
 https://github.com/Rockbox/rockbox
