@@ -5,7 +5,6 @@
 #define CFW_OSOS_H
 #define CFW_PATCH_H
 #define PATCH_COPY(...)
-#define OSOS_ACTION_SUPPORT_QUERY 0xdeadbeef
 #include "../../../payload/custom_eq.h"
 
 struct osos_path {
@@ -14,7 +13,7 @@ struct osos_path {
 };
 
 static unsigned char disk[128];
-static uint32_t disk_size, writes, status, refreshes;
+static uint32_t disk_size, writes;
 static int write_failure, filter_failure;
 const struct cfw_ui_field cfw_eq_fields[CFW_EQ_FIELDS] = {
     {.count = 102},
@@ -39,7 +38,6 @@ const struct cfw_ui_field cfw_eq_fields[CFW_EQ_FIELDS] = {
     {.count = 38, .default_value = 4},
     {.count = 49, .default_value = 24},
 };
-const struct cfw_ui_action cfw_eq_save = {.count = 3};
 
 static int osos_file_open(const struct osos_path *path, int mode, void **handle)
 {
@@ -83,18 +81,6 @@ int cfw_eq_publish(const uint32_t values[CFW_EQ_FIELDS])
     return !filter_failure;
 }
 
-void cfw_ui_refresh(const struct cfw_ui_field *field)
-{
-    assert(field >= cfw_eq_fields && field < cfw_eq_fields + CFW_EQ_FIELDS);
-    refreshes++;
-}
-
-void cfw_ui_status(const struct cfw_ui_action *action, unsigned value)
-{
-    assert(action == &cfw_eq_save && value < 3);
-    status = value;
-}
-
 #include "../../../payload/custom_eq.c"
 
 static void saved(uint32_t version, uint32_t precut)
@@ -136,22 +122,18 @@ int main(void)
     assert(settings[CFW_EQ_BAND4_GAIN] == 24 && settings[CFW_EQ_BAND5_GAIN] == 24);
     assert(settings[CFW_EQ_BAND4_FREQUENCY] == 12 &&
            settings[CFW_EQ_BAND5_FREQUENCY] == 24);
-    assert(cfw_eq_action("CFW_EQ_Save", OSOS_ACTION_SUPPORT_QUERY));
-    assert(!writes);
     cfw_eq_model.change(0, 39);
-    assert(settings[0] == 39 && dirty && refreshes == 1 && !writes);
+    assert(settings[0] == 39 && dirty && !writes);
     cfw_eq_model.change(CFW_EQ_FIELDS, 0);
     cfw_eq_model.change(0, 102);
-    cfw_eq_model.change(0, 39);
-    assert(refreshes == 1 && settings[0] == 39);
+    assert(settings[0] == 39);
+    /* A failed write stays dirty so the next commit retries it. */
     write_failure = 1;
     cfw_eq_model.commit();
-    assert(dirty && status == 1 && writes == 1);
-    cfw_eq_action("CFW_EQ_Open", 0);
-    assert(status == 1 && dirty && writes == 1);
+    assert(dirty && writes == 1);
     write_failure = 0;
-    cfw_eq_action("CFW_EQ_Save", 0);
-    assert(status == 0 && !dirty && writes == 2);
+    cfw_eq_model.commit();
+    assert(!dirty && writes == 2);
     struct eq_file file;
     memcpy(&file, disk, sizeof(file));
     assert(file.version == 4 && file.values[0] == 39 &&
@@ -162,20 +144,20 @@ int main(void)
     assert(settings[0] == 39);
     filter_failure = 1;
     cfw_eq_model.change(0, 40);
-    assert(settings[0] == 39 && status == 2 && !dirty);
+    assert(settings[0] == 39 && !dirty);
     filter_failure = 0;
     cfw_eq_model.change(0, CFW_EQ_PRECUT_AUTO);
     cfw_eq_model.commit();
-    assert(status == 0 && !dirty && writes == 3);
+    assert(!dirty && writes == 3);
     cfw_eq_load_preferences();
     assert(settings[0] == CFW_EQ_PRECUT_AUTO);
     cfw_eq_model.change(0, 41);
     write_failure = 1;
     cfw_eq_model.commit();
-    assert(status == 1 && dirty);
+    assert(dirty);
     write_failure = 0;
     cfw_eq_model.commit();
-    assert(!dirty && status == 0 && writes == 5);
+    assert(!dirty && writes == 5);
     cfw_eq_model.change(CFW_EQ_BAND4_TYPE, 1);
     cfw_eq_model.change(CFW_EQ_BAND5_GAIN, 40);
     cfw_eq_model.commit();

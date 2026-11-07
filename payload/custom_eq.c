@@ -21,7 +21,6 @@ PATCH_COPY(cfw_eq_preset_ids, 0, OSOS_EQ_PRESET_IDS, 23 * 4);
 
 static uint32_t settings[CFW_EQ_FIELDS];
 static int initialized;
-static unsigned int save_status;
 static int dirty;
 static const struct osos_path settings_path = {0, "iPod_Control\\Device\\CFWEQ"};
 
@@ -100,8 +99,8 @@ static void save_preferences(void)
     for (unsigned int i = 0; i < CFW_EQ_FIELDS; i++)
         file.values[i] = settings[i];
     file.checksum = checksum(&file, sizeof(file));
-    save_status = !cfw_preferences_write(&settings_path, &file, sizeof(file));
-    if (!save_status)
+    /* A failed write stays dirty and is retried by the next commit. */
+    if (cfw_preferences_write(&settings_path, &file, sizeof(file)))
         dirty = 0;
 }
 
@@ -114,43 +113,16 @@ static void change_value(uint32_t field, uint32_t value)
         return;
     uint32_t previous = settings[field];
     settings[field] = value;
-    if (cfw_eq_publish(settings)) {
+    if (cfw_eq_publish(settings))
         dirty = 1;
-        if (save_status == 2)
-            save_status = 0;
-        cfw_ui_refresh(&cfw_eq_fields[field]);
-    } else {
+    else
         settings[field] = previous;
-        save_status = 2;
-    }
-    cfw_ui_status(&cfw_eq_save, save_status);
 }
 
 static void commit_values(void)
 {
-    if (dirty) {
+    if (dirty)
         save_preferences();
-        cfw_ui_status(&cfw_eq_save, save_status);
-    }
 }
 
 const struct cfw_ui_model cfw_eq_model = {settings, change_value, commit_values};
-
-int cfw_eq_action(const char *action, uint32_t argument)
-{
-    int open = cfw_string_equal(action, "CFW_EQ_Open");
-    int save = cfw_string_equal(action, "CFW_EQ_Save");
-    if (!open && !save)
-        return 0;
-    if (argument == OSOS_ACTION_SUPPORT_QUERY)
-        return 1;
-    if (!initialized)
-        defaults();
-    if (save)
-        save_preferences();
-    if (open)
-        for (unsigned int i = 0; i < CFW_EQ_FIELDS; i++)
-            cfw_ui_refresh(&cfw_eq_fields[i]);
-    cfw_ui_status(&cfw_eq_save, save_status);
-    return 1;
-}
