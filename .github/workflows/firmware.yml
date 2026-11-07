@@ -4,7 +4,7 @@ name: Firmware
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, pauls-ipod]
     tags: ['v*']
   workflow_dispatch:
 
