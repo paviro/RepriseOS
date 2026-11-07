@@ -147,4 +147,10 @@ static void change_value(uint32_t field, uint32_t value)
         settings[field] = previous;
 }
 
+void cfw_eq_reset_preferences(void)
+{
+    defaults();
+    commit_values();
+}
+
 const struct cfw_ui_model cfw_eq_model = {settings, change_value, commit_values};
