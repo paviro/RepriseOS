@@ -82,6 +82,7 @@ class PayloadTests(unittest.TestCase):
                 "bitmap_assets",
                 "dark_mode",
                 "volume_warning",
+                "store",
                 "osos_handoff",
                 "media_progress",
             ):
