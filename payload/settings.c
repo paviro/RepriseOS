@@ -9,6 +9,7 @@
 #include "preferences.h"
 #include "resources.h"
 #include "volume_warning.h"
+#include "sound.h"
 #include "store.h"
 
 static void *native_preferences;
@@ -21,6 +22,7 @@ void cfw_settings_boot(void *preferences)
     cfw_store_load();
     cfw_eq_load_preferences();
     cfw_dark_mode_load();
+    cfw_crossfeed_load();
     cfw_ui_visibility_load_preferences();
     cfw_volume_warning_load();
     cfw_store_flush();
@@ -47,11 +49,10 @@ PATCH_ARM int cfw_settings_action(void *controller, const char *action,
                                   uint32_t argument)
 {
     if (cfw_chapters_action(controller, action, argument) ||
-        cfw_ui_handle_action(action, argument) ||
         cfw_clicker_action(controller, action, argument) ||
         cfw_dark_mode_action(controller, action, argument) ||
         cfw_volume_warning_action(controller, action, argument) ||
-        cfw_eq_action(action, argument))
+        cfw_crossfeed_action(controller, action, argument))
         return 1;
 
     return osos_settings_action(controller, action, argument);
@@ -61,10 +62,10 @@ PATCH_ARM int cfw_settings_property(void *model, uint32_t type, uint32_t propert
                                     uintptr_t *out)
 {
     if (cfw_chapters_property(type, property, out) ||
-        cfw_ui_property(type, property, out) ||
         cfw_dark_mode_property(type, property, out) ||
         cfw_volume_warning_property(type, property, out) ||
-        cfw_clicker_property(model, type, property, out))
+        cfw_clicker_property(model, type, property, out) ||
+        cfw_crossfeed_property(type, property, out))
         return 1;
 
     if (type == OSOS_RESOURCE_BMAP) {
@@ -86,8 +87,7 @@ PATCH_ARM int cfw_settings_indexed_property(void *model, uint32_t type,
                                             uint32_t property, uint32_t index,
                                             uintptr_t *out)
 {
-    if (cfw_chapters_indexed_property(type, property, index, out) ||
-        cfw_ui_indexed_property(type, property, index, out))
+    if (cfw_chapters_indexed_property(type, property, index, out))
         return 1;
 
     return cfw_ui_visibility_property(model, type, property, index, out);

@@ -193,3 +193,7 @@ PATCH_CALL(OSOS_EPISODE_CANCEL_APPEND_CALL, OSOS_CONTEXT_MENU_APPEND,
 /* Extend native item-status circles for unfinished playback. */
 PATCH_POINTER(OSOS_MEDIA_LIST_PROPERTY_SLOT, OSOS_MEDIA_LIST_PROPERTY,
               cfw_media_progress_property);
+
+/* Sound effects on the native output */
+PATCH_CALL(OSOS_AUDIO_OUTPUT_BEGIN_CALL, OSOS_AUDIO_OUTPUT_BEGIN,
+           cfw_sound_output_hook);
