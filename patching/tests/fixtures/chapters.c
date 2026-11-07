@@ -216,6 +216,28 @@ static void osos_episode_play_chapter(void *c, int row, uint32_t start)
     episode_plays++;
 }
 
+static unsigned media_menu_captures;
+
+void cfw_media_menu_capture(void *c, int row, unsigned layout_offset)
+{
+    assert(c == &controller && (row == 4 || row == -1));
+    assert(layout_offset == OSOS_EPISODE_LAYOUT_OFFSET);
+    media_menu_captures++;
+}
+
+void cfw_media_menu_cancel(struct osos_context_menu *list, uint32_t label,
+                           const char *action, uint32_t flags)
+{
+    osos_context_menu_append(list, label, action, flags);
+}
+
+int cfw_media_menu_action(void *c, const char *action, uint32_t argument)
+{
+    (void)c;
+    (void)argument;
+    return action && !strcmp(action, "CFW_FileInfo");
+}
+
 #include "../../../payload/chapters.c"
 #include "../../../payload/episode_actions.c"
 
@@ -328,7 +350,8 @@ int main(void)
     assert(cfw_episode_action(&controller, "CFW_EpisodeChapters",
                               OSOS_ACTION_SUPPORT_QUERY));
     assert(pushes == previous_pushes && !episode_plays);
-    assert(cfw_episode_menu(&controller, 4) == 42);
+    assert(cfw_episode_action(&controller, "CFW_FileInfo", 0) == 1);
+    assert(cfw_episode_menu(&controller, 4) == 42 && media_menu_captures == 1);
     cfw_episode_menu_cancel(NULL, 123, "HandleCancel", 0);
     assert(menus == previous_menus + 1);
     int other_controller;

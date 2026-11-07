@@ -96,7 +96,7 @@ int main(void)
     restore_layout();
     const char *screens[] = {
         "HandleStartGenius",
-        "CFW_SongInfo",
+        "CFW_FileInfo",
         "CFW_NowPlayingChapters",
         "CFW_EpisodeChapters",
     };
@@ -109,7 +109,7 @@ int main(void)
         "HandleAudiobookSlower",
         "CFW_PlayNext",
         "CFW_PlayLast",
-        "CFW_SongInfoExtra",
+        "CFW_FileInfoExtra",
         "CFW_Chapters_Select",
         "CFW_NowPlayingChaptersExtra",
         "CFW_EpisodeChaptersExtra",

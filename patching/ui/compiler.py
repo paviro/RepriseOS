@@ -190,13 +190,19 @@ class DocumentCompiler:
         )
 
     def list_page(self, item):
-        """A native scrolling list whose rows are supplied by a runtime model."""
+        """A native scrolling list whose rows are supplied by a runtime model.
+
+        Choosing a row runs <name>_Select; select="return" then pops the list.
+        layout="inline" shows the detail beside the row text, "stacked" below it."""
         resources = self.resources
         property_id = resources.allocate(item.name + "_Rows")
         detail = resources.allocate(item.name + "_Detail")
         bindings = [(0x534F5243, struct.pack("<III", 0x8900, property_id, 1))]
         row_id, row = self.sound_check_row(bindings, detail)
         row[1][0x94:0x95] = b"\x01"
+        if item.layout == "stacked":
+            # Native row style 6: title with a grey, truncating subtitle line.
+            put(row[1], 0x60, 6)
         self.page(
             item.name,
             item.title,
@@ -206,7 +212,7 @@ class DocumentCompiler:
                     row_id,
                     "chosen",
                     item.name + "_Select",
-                    "navigator.PopTopScreen",
+                    "navigator.PopTopScreen" if item.select == "return" else None,
                     [],
                 ),
             ],

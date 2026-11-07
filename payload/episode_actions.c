@@ -4,6 +4,7 @@
 #include "patch.h"
 #include "chapters.h"
 #include "chapters_ui.h"
+#include "media_menus.h"
 #include "native/chapters.h"
 
 /* The native menu receives an already mapped model index, excluding the All row.
@@ -32,6 +33,7 @@ PATCH_ARM int cfw_episode_menu(void *controller, int row)
     episode_menu.row = row;
     episode_menu.available =
         episode_chapter_count(controller, row, &episode_menu.item) != 0;
+    cfw_media_menu_capture(controller, row, OSOS_EPISODE_LAYOUT_OFFSET);
     return osos_episode_menu(controller, row);
 }
 
@@ -40,12 +42,14 @@ PATCH_ARM void cfw_episode_menu_cancel(struct osos_context_menu *menu, uint32_t 
 {
     if (episode_menu.available)
         osos_context_menu_append(menu, CFW_CHAPTERS_LABEL, "CFW_EpisodeChapters", 1);
-    osos_context_menu_append(menu, label, action, flags);
+    cfw_media_menu_cancel(menu, label, action, flags);
 }
 
 PATCH_ARM int cfw_episode_action(void *controller, const char *action,
                                  uint32_t argument)
 {
+    if (cfw_media_menu_action(controller, action, argument))
+        return 1;
     if (!cfw_string_equal(action, "CFW_EpisodeChapters"))
         return osos_episode_action(controller, action, argument);
     if (argument != OSOS_ACTION_SUPPORT_QUERY) {
