@@ -56,6 +56,7 @@ class PayloadTests(unittest.TestCase):
                 [
                     root / "payload/dark_mode.ui",
                     root / "payload/custom_eq.ui",
+                    root / "payload/crossfeed.ui",
                     root / "payload/cfw_info.ui",
                     root / "payload/album_artists.ui",
                 ],
@@ -70,6 +71,7 @@ class PayloadTests(unittest.TestCase):
                 "eq_preferences",
                 "eq_audio",
                 "eq_canvas",
+                "crossfeed",
                 "menu_resources",
                 "bitmap_assets",
                 "dark_mode",

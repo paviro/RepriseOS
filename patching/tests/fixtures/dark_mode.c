@@ -319,6 +319,22 @@ int cfw_ui_visibility_property(void *model, uint32_t type, uint32_t property,
     return 0;
 }
 
+int cfw_crossfeed_action(void *owner, const char *action, uint32_t argument)
+{
+    (void)owner;
+    (void)action;
+    (void)argument;
+    return 0;
+}
+
+int cfw_crossfeed_property(uint32_t type, uint32_t property, uintptr_t *out)
+{
+    (void)type;
+    (void)property;
+    (void)out;
+    return 0;
+}
+
 #define osos_settings_action settings_action
 #define osos_settings_property settings_property
 #include "../../../payload/settings.c"
