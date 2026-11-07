@@ -14,8 +14,8 @@ static int native_region(void);
 #define CFW_PATCH_H
 #define PATCH_ARM
 
-static uint32_t disk_record;
-static int missing = 1, fail_write, writes, notifications, region = 1;
+static uint32_t stored_record;
+static int stored, store_sets, notifications, region = 1;
 static int controller, model;
 
 static int native_region(void)
@@ -23,38 +23,23 @@ static int native_region(void)
     return region;
 }
 
-static int file_open(const struct osos_path *path, int mode, void **handle)
+#include "../../../payload/store.h"
+
+uint32_t cfw_store_get(uint32_t key, void *data, uint32_t capacity)
 {
-    assert(!strcmp(path->text, "iPod_Control\\Device\\CFWVolWarn"));
-    if (mode == 1 && missing)
-        return -1;
-    *handle = &disk_record;
-    return 0;
+    assert(key == CFW_STORE_VOLUME_WARNING && capacity == 4);
+    if (!stored)
+        return 0;
+    memcpy(data, &stored_record, 4);
+    return 4;
 }
 
-static int file_read(void *handle, void *out, uint32_t size, uint32_t *count)
+void cfw_store_set(uint32_t key, const void *data, uint32_t size)
 {
-    assert(handle == &disk_record && size == 4);
-    memcpy(out, &disk_record, 4);
-    *count = size;
-    return 0;
-}
-
-static int file_write(void *handle, const void *record, uint32_t size, uint32_t *count)
-{
-    assert(handle == &disk_record && size == 4);
-    writes++;
-    *count = fail_write ? 0 : size;
-    if (!fail_write) {
-        memcpy(&disk_record, record, size);
-        missing = 0;
-    }
-    return 0;
-}
-
-static void file_close(void *handle)
-{
-    assert(handle == &disk_record);
+    assert(key == CFW_STORE_VOLUME_WARNING && size == 4);
+    memcpy(&stored_record, data, 4);
+    stored = 1;
+    store_sets++;
 }
 
 static void *settings_model(void *value)
@@ -75,10 +60,6 @@ static void notify(void *value, uint32_t type, uint32_t property)
     notifications++;
 }
 
-#define osos_file_open file_open
-#define osos_file_read file_read
-#define osos_file_write file_write
-#define osos_file_close file_close
 #define osos_settings_model settings_model
 #define osos_settings_on_off on_off
 #define osos_model_notify notify
@@ -100,7 +81,7 @@ int main(void)
     assert(!cfw_volume_warning_action(&controller, "stock", 0));
     assert(cfw_volume_warning_action(&controller, "CFW_VolumeWarning_Toggle",
                                      OSOS_ACTION_SUPPORT_QUERY));
-    assert(!writes && !notifications);
+    assert(!store_sets && !notifications);
 
     /* A missing record keeps Apple's warning. */
     cfw_volume_warning_load();
@@ -110,20 +91,24 @@ int main(void)
     region = 1;
 
     assert(cfw_volume_warning_action(&controller, "CFW_VolumeWarning_Toggle", 0));
-    assert(disk_record == VOLUME_WARNING_OFF_RECORD && writes == 1 &&
+    assert(stored_record == VOLUME_WARNING_OFF_RECORD && store_sets == 1 &&
            notifications == 1);
     assert(value() == 1 && !cfw_volume_warning_active());
-
-    fail_write = 1;
-    assert(cfw_volume_warning_action(&controller, "CFW_VolumeWarning_Toggle", 0));
-    assert(value() == 1 && writes == 2 && notifications == 1);
-    fail_write = 0;
 
     cfw_volume_warning_load();
     assert(value() == 1);
     assert(cfw_volume_warning_action(&controller, "CFW_VolumeWarning_Toggle", 0));
-    assert(disk_record == VOLUME_WARNING_ON_RECORD && value() == 2);
-    disk_record = 0;
+    assert(stored_record == VOLUME_WARNING_ON_RECORD && store_sets == 2 &&
+           notifications == 2 && value() == 2);
+
+    /* Only the Off record turns the warning off. */
+    stored_record = 0;
+    cfw_volume_warning_load();
+    assert(value() == 2);
+    stored_record = VOLUME_WARNING_OFF_RECORD;
+    cfw_volume_warning_load();
+    assert(value() == 1);
+    stored = 0;
     cfw_volume_warning_load();
     assert(value() == 2);
     return 0;
