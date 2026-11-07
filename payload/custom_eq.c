@@ -75,11 +75,14 @@ void cfw_eq_load_preferences(void)
         }
         for (unsigned int i = 0; i < CFW_EQ_FIELDS; i++)
             file.values[i] = i < EQ_LEGACY_FIELDS ? legacy.values[i] : settings[i];
-    } else if (file.version != 3 ||
+    } else if ((file.version != 3 && file.version != 4) ||
                !cfw_preferences_read(&settings_path, &file, sizeof(file)) ||
                file.checksum != checksum(&file, sizeof(file))) {
         return;
     }
+    /* Version 4 inserted Auto before the manual precut choices. */
+    if (file.version < 4)
+        file.values[CFW_EQ_PRECUT]++;
     for (unsigned int i = 0; i < CFW_EQ_FIELDS; i++)
         if (file.values[i] >= cfw_eq_fields[i].count)
             return;
@@ -93,7 +96,7 @@ static void save_preferences(void)
 {
     struct eq_file file;
     file.magic = 0x51455743;
-    file.version = 3;
+    file.version = 4;
     for (unsigned int i = 0; i < CFW_EQ_FIELDS; i++)
         file.values[i] = settings[i];
     file.checksum = checksum(&file, sizeof(file));
