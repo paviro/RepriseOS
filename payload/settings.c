@@ -7,6 +7,7 @@
 #include "osos.h"
 #include "patch.h"
 #include "resources.h"
+#include "volume_warning.h"
 
 PATCH_ARM int cfw_settings_action(void *controller, const char *action,
                                   uint32_t argument)
@@ -15,6 +16,7 @@ PATCH_ARM int cfw_settings_action(void *controller, const char *action,
         cfw_ui_handle_action(action, argument) ||
         cfw_clicker_action(controller, action, argument) ||
         cfw_dark_mode_action(controller, action, argument) ||
+        cfw_volume_warning_action(controller, action, argument) ||
         cfw_eq_action(action, argument))
         return 1;
 
@@ -27,6 +29,7 @@ PATCH_ARM int cfw_settings_property(void *model, uint32_t type, uint32_t propert
     if (cfw_chapters_property(type, property, out) ||
         cfw_ui_property(type, property, out) ||
         cfw_dark_mode_property(type, property, out) ||
+        cfw_volume_warning_property(type, property, out) ||
         cfw_clicker_property(model, type, property, out))
         return 1;
 
