@@ -1,6 +1,6 @@
 # Manifest
 
-`manifest.toml` names the extension, its modules and its assets. `rv.mk` reads the id, the modules, the required libraries and the asset files from it; `rvx-pack` checks it and compiles it into the `.rvx`. The full format, with every rule, is the docstring of `manifest.py` in the SDK.
+`manifest.toml` names the extension, its modules and its assets. `rv.mk` reads the id, the modules, the listed libraries and the asset files from it; `rvx-pack` checks it and compiles it into the `.rvx`. The full format, with every rule, is the docstring of `manifest.py` in the SDK.
 
 | Key | |
 |---|---|
@@ -12,7 +12,7 @@
 | `stability` | optional: `alpha`, `beta` or `stable`, the author's word |
 | `note` | optional: one line under the version, such as "Ported from Rockbox" |
 | `content` | optional: a folder under `/Revola/` the extension reads, or a list of them; one owner per folder |
-| `requires` | optional: the ids of up to four library extensions whose functions the modules call |
+| `[libraries]` | optional: `required` and `optional`, the ids of up to four library extensions in all whose functions the modules call; see [Libraries](modules.md#libraries) |
 | `exports` | a library's functions, by C name |
 | `[[module]]` | `name`, `trigger` (`always` for the first, `main`; `screen` with `screens`; `manual`), and `preload` for a module after main |
 | `[[asset]]` | `name`, `file`, and optionally `pane`, `preload` and `compress`, see [Assets](assets.md) |
