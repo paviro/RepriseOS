@@ -112,6 +112,9 @@ ID_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 # The core's own id, which owns its bitmap assets; no extension may take it.
 CORE_ID = "revola"
 RESERVED_IDS = {CORE_ID}
+# Libraries the core provides itself: listed as optional, and no extension
+# may take the id.
+CORE_LIBRARIES = {"reprise"}
 MODULE_PATTERN = re.compile(r"[a-z0-9_-]+")
 ASSET_PATTERN = re.compile(r"[a-z0-9_-]{1,31}")
 ASSET_KEYS = {"name", "file", "preload", "compress", "pane"}
@@ -235,7 +238,10 @@ def compile_manifest(document):
         raise ValueError("note is a string")
     if "api" not in document:
         raise ValueError("missing api")
-    if not ID_PATTERN.fullmatch(document["id"]) or document["id"] in RESERVED_IDS:
+    if (
+        not ID_PATTERN.fullmatch(document["id"])
+        or document["id"] in RESERVED_IDS | CORE_LIBRARIES
+    ):
         raise ValueError(f"bad id {document['id']!r}")
     if document["license"] not in LICENSES:
         raise ValueError(f"license {document['license']!r} is not GPL-3.0 compatible")
@@ -377,6 +383,11 @@ def libraries(document):
             raise ValueError(f"bad library id {identifier!r}")
         if identifier == document.get("id"):
             raise ValueError("an extension cannot list itself as a library")
+    for identifier in lists[0]:
+        if identifier in CORE_LIBRARIES:
+            raise ValueError(
+                f"{identifier} is provided by the core; list it under optional"
+            )
     if lists[1] and api_word(document.get("api")) < OPTIONAL_API:
         raise ValueError(
             f"optional libraries need api {OPTIONAL_API >> 16}.{OPTIONAL_API & 0xFFFF}"
