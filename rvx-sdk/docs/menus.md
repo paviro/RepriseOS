@@ -37,11 +37,11 @@ An entry's pane, `.pane = RV_PANE(...)`, shows `.bitmap`, a picture from the ext
 | Picture | Shows | Where |
 |---|---|---|
 | 78 x 121 mask, `pane = "icon"` | the label, the caption below and the icon on the system's box (or without it, with the entry's `.plain_icon`) | Settings only; every Settings row |
-| 119 x 119 | the picture with the caption beneath | Main, Music, Videos, Extras; the pane of a row without a picture on Main, Music and Videos that has another pane field, or on Main no `.preview` |
+| 119 x 119 | the picture with the caption beneath | Main, Music, Videos, Extras, Settings; the pane of a row without a picture on Main, Music and Videos that has another pane field, or on Main no `.preview` |
 | 142 x 87 | the picture with the caption beneath | the same; the pane of a row without a picture under Extras |
-| 130 x 128 | the label as a title line at the top, the two lines over the picture, the caption beneath | Main, Music, Videos, Extras |
-| 146 x 110 | the picture with the caption as the short count line beneath it, about 90 pixels wide, and the badge before it | Main, Music, Videos, Extras |
-| 132 x 145 | the picture in the clock's box over the World Clock pane's world map, the caption on the date line | Music, Videos, Extras |
+| 130 x 128 | the label as a title line at the top, the two lines over the picture, the caption beneath | Main, Music, Videos, Extras, Settings |
+| 146 x 110 | the picture with the caption as the short count line beneath it, about 90 pixels wide, and the badge before it | Main, Music, Videos, Extras, Settings |
+| 132 x 145 | the picture in the clock's box over the World Clock pane's world map, the caption on the date line | Music, Videos, Extras, Settings |
 
 In the 119 x 119, 142 x 87 and 146 x 110 shapes a missing caption falls back to the label; the others show the label on a title line. A picture of a size the menu has no pane for, such as an icon outside Settings, or one an [asset provider](assets.md#asset-provider) serves at a different size, shows the caption alone. Panes are built the first time they are needed, so a newly enabled extension gets them at once. An Extras item mirrored onto Main uses the same picture in both. The 142 x 87, 130 x 128, 146 x 110 and 132 x 145 shapes are copies of Apple's pane templates whose views take new ids; `api->ui_stock_view(view)` (API 1.91) gives a copied view's stock id, for [hooks](modules.md#hooks) that tell views apart.
 
