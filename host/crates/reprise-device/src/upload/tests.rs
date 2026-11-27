@@ -473,6 +473,43 @@ fn helpers_without_batch_upload_take_one_file() {
 }
 
 #[test]
+fn file_removal_is_a_manifest_capability() {
+    assert!(!fixture_helper().unwrap().supports_file_removal());
+    let image = include_bytes!("../../../../../usb-helper/tests/fixtures/upload.dfu");
+    let mut manifest: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../../../usb-helper/tests/fixtures/manifest.json"
+    ))
+    .unwrap();
+    manifest["file_removal"] = true.into();
+    let helper = UploadHelper::from_bytes(image, &serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert!(helper.supports_file_removal());
+}
+
+#[test]
+fn removal_result_reports_deleted_and_remaining_entries() {
+    let mut raw = vec![0; 32];
+    put(&mut raw, 8, 1000);
+    put(&mut raw, 28, 1 | 2 | 8 | 64);
+    let report = super::removal_report(&raw).unwrap();
+    assert!(report.companion && report.firmware && report.staged_uploads);
+    assert!(!report.extensions && report.extensions_left);
+    assert!(!report.companion_left && !report.firmware_left && !report.staged_uploads_left);
+    assert_eq!(
+        report.leftovers(),
+        ["/Reprise, /Revola/Extensions, /Revola/Data or /themes"]
+    );
+    put(&mut raw, 28, 15);
+    assert!(super::removal_report(&raw).unwrap().leftovers().is_empty());
+    put(&mut raw, 28, 0);
+    assert!(super::removal_report(&raw).unwrap().leftovers().is_empty());
+    put(&mut raw, 28, 256);
+    assert!(super::removal_report(&raw).is_err());
+    put(&mut raw, 28, 0);
+    put(&mut raw, 8, 0);
+    assert!(super::removal_report(&raw).is_err());
+}
+
+#[test]
 fn batch_upload_is_a_manifest_capability() {
     assert!(!fixture_helper().unwrap().supports_batch_upload());
     let image = include_bytes!("../../../../../usb-helper/tests/fixtures/upload.dfu");
