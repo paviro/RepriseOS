@@ -21,7 +21,7 @@ The core decodes only the pane picture on screen. A canvas's bitmaps stay decode
 
 ## Asset provider
 
-`api->asset_set_provider(self, &provider)` lets a theme replace any extension's bitmap assets, Settings icons and canvas bitmaps alike. The `struct rv_asset_provider` of `rv_theme.h` has three optional functions. The core calls them with the owner extension's id hash and the asset's name hash, both 32-bit FNV-1a; the core's own bitmaps are owned by the hash of `"revola"`.
+`api->asset_set_provider(self, &provider)` lets a theme replace any extension's bitmap assets, Settings icons and canvas bitmaps alike. The `struct rv_asset_provider` of `rv_theme.h` has three optional functions. The core calls them with the owner extension's id hash and the asset's name hash, both 32-bit FNV-1a; the core's own bitmaps are owned by the hash of `"reprise"`.
 
 Before decoding a bitmap, the core asks `replacement` whether the theme has one and how it is stored (`struct rv_asset_stream`: raw or one lz stream in the package format, with stored and decoded sizes). It then reads the stored bytes with `replacement_read` and decodes them into a BMap with its 28-byte header.
 

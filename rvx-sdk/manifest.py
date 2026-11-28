@@ -109,12 +109,12 @@ NATIVE_HEAP_BASE = 0x08B3B1B0  # OSOS 2.0.5; raw sites lie below it
 TRIGGERS = {"always": 0, "screen": 1, "manual": 2}
 TEXT_FIELDS = ("id", "name", "description", "version", "author", "license")
 ID_PATTERN = re.compile(r"[a-z][a-z0-9_-]{0,31}")
-# The core's own id, which owns its bitmap assets; no extension may take it.
-CORE_ID = "revola"
+# The core's own id, which owns its bitmap assets and names the library the
+# core provides; no extension may take it.
+CORE_ID = "reprise"
+# Libraries the core provides itself: listed as optional.
+CORE_LIBRARIES = {CORE_ID}
 RESERVED_IDS = {CORE_ID}
-# Libraries the core provides itself: listed as optional, and no extension
-# may take the id.
-CORE_LIBRARIES = {"reprise"}
 MODULE_PATTERN = re.compile(r"[a-z0-9_-]+")
 ASSET_PATTERN = re.compile(r"[a-z0-9_-]{1,31}")
 ASSET_KEYS = {"name", "file", "preload", "compress", "pane"}
@@ -240,10 +240,7 @@ def compile_manifest(document):
         raise ValueError("note is a string")
     if "api" not in document:
         raise ValueError("missing api")
-    if (
-        not ID_PATTERN.fullmatch(document["id"])
-        or document["id"] in RESERVED_IDS | CORE_LIBRARIES
-    ):
+    if not ID_PATTERN.fullmatch(document["id"]) or document["id"] in RESERVED_IDS:
         raise ValueError(f"bad id {document['id']!r}")
     if document["license"] not in LICENSES:
         raise ValueError(f"license {document['license']!r} is not GPL-3.0 compatible")
@@ -381,7 +378,9 @@ def libraries(document):
     if len(listed) > MAX_LIBRARIES or len(set(listed)) != len(listed):
         raise ValueError(f"libraries lists at most {MAX_LIBRARIES} distinct ids")
     for identifier in listed:
-        if not ID_PATTERN.fullmatch(identifier) or identifier in RESERVED_IDS:
+        if not ID_PATTERN.fullmatch(identifier) or (
+            identifier in RESERVED_IDS - CORE_LIBRARIES
+        ):
             raise ValueError(f"bad library id {identifier!r}")
         if identifier == document.get("id"):
             raise ValueError("an extension cannot list itself as a library")

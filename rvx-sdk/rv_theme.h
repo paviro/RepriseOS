@@ -9,7 +9,7 @@
 
 /* `owner` and `asset` are the extension's id and the asset's name as the core
  * hashes strings (32-bit FNV-1a); the core's own assets are owned by the hash
- * of "revola". A bitmap is a whole BMap, its 28-byte header and its rows, as
+ * of "reprise". A bitmap is a whole BMap, its 28-byte header and its rows, as
  * the core decodes it from the package. The provider hands it over as stored,
  * raw or as one lz stream in the package format, and the core decodes it like
  * the extension's own. */
